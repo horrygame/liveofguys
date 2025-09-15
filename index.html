@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Племя Древних: Выживание</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(to bottom, #1a5c2d, #0d2e1a);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #f5d547;
+            text-shadow: 3px 3px 0 #000;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+        
+        .game-container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+        }
+        
+        #gameCanvas {
+            background: #7cae7a;
+            border: 3px solid #5a8158;
+            border-radius: 10px;
+            flex: 2;
+        }
+        
+        .ui-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: rgba(69, 97, 60, 0.8);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        h2 {
+            color: #f5d547;
+            border-bottom: 2px solid #f5d547;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+        
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        
+        .resource {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+        
+        .resource-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 8px;
+            background: #f5d547;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .villager {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            position: relative;
+        }
+        
+        .villager-name {
+            font-weight: bold;
+            color: #f5d547;
+        }
+        
+        .villager-role {
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+        
+        .progress-container {
+            margin: 5px 0;
+        }
+        
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+        }
+        
+        .progress-bar {
+            height: 10px;
+            background: #444;
+            border-radius: 5px;
+            margin-top: 3px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 5px;
+        }
+        
+        .health { background: #e74c3c; }
+        .food { background: #2ecc71; }
+        .energy { background: #3498db; }
+        .happiness { background: #f1c40f; }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        
+        .stat {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #f5d547;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+        }
+        
+        .time-display {
+            text-align: center;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .season-display {
+            text-align: center;
+            font-size: 1.2rem;
+            padding: 5px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+        
+        .spring { background: rgba(46, 204, 113, 0.3); }
+        .summer { background: rgba(241, 196, 15, 0.3); }
+        .autumn { background: rgba(230, 126, 34, 0.3); }
+        .winter { background: rgba(52, 152, 219, 0.3); }
+        
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        
+        button {
+            background: #f5d547;
+            color: #333;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: #e6c63d;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #777;
+            color: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .building {
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+        
+        .tech-item {
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .event-log {
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        
+        .event {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #f5d547;
+            background: rgba(0, 0, 0, 0.2);
+            font-size: 0.9rem;
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            border-bottom: 1px dotted #f5d547;
+            cursor: help;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .shop-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(69, 97, 60, 0.95);
+            border: 3px solid #f5d547;
+            border-radius: 10px;
+            padding: 20px;
+            z-index: 100;
+            width: 300px;
+        }
+        
+        .shop-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #f5d547;
+            padding-bottom: 10px;
+        }
+        
+        .close-shop {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .shop-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 10px 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .shop-item:hover {
+            background: rgba(245, 213, 71, 0.2);
+        }
+        
+        .shop-item-cost {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .cost-item {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        
+        .cost-icon {
+            width: 16px;
+            height: 16px;
+            background: #f5d547;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 99;
+        }
+        
+        .building-preview {
+            position: absolute;
+            opacity: 0.7;
+            pointer-events: none;
+            display: none;
+        }
+        
+        @media (max-width: 900px) {
+            .game-container {
+                flex-direction: column;
+            }
+            
+            #gameCanvas {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Племя Древних: Выживание</h1>
+        <p>Управляйте своим поселением, развивайте технологии и выживайте в суровом древнем мире</p>
+    </header>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div class="ui-panel">
+            <div class="panel">
+                <h2>Ресурсы</h2>
+                <div class="resource-grid">
+                    <div class="resource">
+                        <div>
+                            <span class="resource-icon"></span>
+                            <span>Еда:</span>
+                        </div>
+                        <span id="foodCount">100</span>
+                    </div>
+                    <div class="resource">
+                        <div>
+                            <span class="resource-icon"></span>
+                            <span>Дерево:</span>
+                        </div>
+                        <span id="woodCount">50</span>
+                    </div>
+                    <div class="resource">
+                        <div>
+                            <span class="resource-icon"></span>
+                            <span>Камень:</span>
+                        </div>
+                        <span id="stoneCount">20</span>
+                    </div>
+                    <div class="resource">
+                        <div>
+                            <span class="resource-icon"></span>
+                            <span>Кожи:</span>
+                        </div>
+                        <span id="hideCount">10</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>Поселенцы <span id="villagersCount">3</span>/<span id="maxVillagers">10</span></h2>
+                <div id="villagersList">
+                    <!-- Villagers will be added here -->
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>Действия</h2>
+                <div class="actions">
+                    <button id="addVillagerBtn" class="tooltip">Новый поселенец
+                        <span class="tooltiptext">Требуется: 50 еды и свободное жилье</span>
+                    </button>
+                    <button id="assignHunterBtn" class="tooltip">Назначить охотника
+                        <span class="tooltiptext">Требуется: 1 инструмент на охотника</span>
+                    </button>
+                    <button id="shopBtn">Магазин</button>
+                    <button id="gatherFoodBtn">Собирать еду</button>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>Статистика</h2>
+                <div class="stats-grid">
+                    <div class="stat">
+                        <div class="stat-value" id="dayCount">1</div>
+                        <div class="stat-label">День</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="populationCount">3</div>
+                        <div class="stat-label">Население</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="birthsCount">0</div>
+                        <div class="stat-label">Рождения</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="deathsCount">0</div>
+                        <div class="stat-label">Смерти</div>
+                    </div>
+                </div>
+                
+                <div class="time-display">
+                    <div id="timeOfDay">День</div>
+                    <div id="dateDisplay">День 1, Весна</div>
+                </div>
+                
+                <div class="season-display spring" id="seasonDisplay">Весна</div>
+            </div>
+            
+            <div class="panel">
+                <h2>События</h2>
+                <div class="event-log" id="eventLog">
+                    <div class="event">Ваше племя начинает свое существование. Удачи в выживании!</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="overlay"></div>
+    
+    <div class="shop-modal" id="shopModal">
+        <div class="shop-header">
+            <h2>Магазин построек</h2>
+            <button class="close-shop" id="closeShop">X</button>
+        </div>
+        
+        <div class="shop-item" id="buildHutBtnShop">
+            <div>
+                <div>Хижина</div>
+                <div class="shop-item-cost">
+                    <div class="cost-item">
+                        <span class="cost-icon"></span>
+                        <span>30</span>
+                    </div>
+                    <div class="cost-item">
+                        <span class="cost-icon"></span>
+                        <span>10</span>
+                    </div>
+                </div>
+            </div>
+            <div>+5 к населению</div>
+        </div>
+        
+        <div class="shop-item" id="buildStorageBtnShop">
+            <div>
+                <div>Склад</div>
+                <div class="shop-item-cost">
+                    <div class="cost-item">
+                        <span class="cost-icon"></span>
+                        <span>40</span>
+                    </div>
+                    <div class="cost-item">
+                        <span class="cost-icon"></span>
+                        <span>20</span>
+                    </div>
+                </div>
+            </div>
+            <div>+50% к хранению</div>
+        </div>
+        
+        <div class="shop-item" id="buildFarmBtnShop">
+            <div>
+                <div>Ферма</div>
+                <div class="shop-item-cost">
+                    <div class="cost-item">
+                        <span class="cost-icon"></span>
+                        <span>50</span>
+                    </div>
+                    <div class="cost-item">
+                        <span class="cost-icon"></span>
+                        <span>30</span>
+                    </div>
+                </div>
+            </div>
+            <div>+10 еды/день</div>
+        </div>
+    </div>
+
+    <img id="redGuyImg" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABCElEQVRYw+2WQY6DMAxFXcWVuAIjrsSIG3GFXoEz9AqMuAIjrtArdMQVGHGljrhCR4y4Qkf8TyOVlFHaTlvJQivxJMuJ/R3HdkIIPE3TdD0Mw9P3/VMpxR3HwXEcX8dxfB3H8XUcx9dxHF/HcXwdx/F1HMfXcRxfx3F8HcfxdRzH13EcX8dxfB3H8XUcx9dxHF/HcXwdx/F1HMfXcRxfx3F8HcfxdRzH13EcX8dxfB3H8XUcx9dxHF/HcXwdx/F1HMfXcRxfx3F8HcfxdRzH13EcX8dxfB3H8XUcx9dxHF/HcXwdx/F1HMfXcRxfx3F8HcfxdRzH13EcX8dxfB3H8XUcx9dxHF8HAP4A6Fd2W0NxQa0AAAAASUVORK5CYII=" style="display: none;">
+    <img id="basicHouseImg" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAACVUlEQVR4nO2aTW7CMBCGXy5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIAJA5A4gAkDkDiACQOQOIANP8AeJbN2k9B0Q8AAAAASUVORK5CYII=" style="display: none;">
+
+    <script>
+        // Основные переменные игры
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Загрузка изображений
+        const redGuyImg = document.getElementById('redGuyImg');
+        const basicHouseImg = document.getElementById('basicHouseImg');
+        
+        // Состояние игры
+        const gameState = {
+            resources: {
+                food: 100,
+                wood: 50,
+                stone: 20,
+                hide: 10
+            },
+            villagers: [],
+            buildings: [
+                { type: 'hut', level: 1, count: 2 }
+            ],
+            day: 1,
+            time: 0.5, // 0-1, где 0 - полночь, 0.5 - полдень
+            season: 0, // 0-весна, 1-лето, 2-осень, 3-зима
+            gameSpeed: 1,
+            stats: {
+                births: 0,
+                deaths: 0
+            },
+            events: [],
+            buildingMode: false,
+            currentBuilding: null
+        };
+        
+        // Класс поселенца
+        class Villager {
+            constructor(name) {
+                this.id = Math.random().toString(36).substr(2, 9);
+                this.name = name;
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = 20;
+                this.speed = 1 + Math.random() * 0.5;
+                this.target = null;
+                this.role = 'gatherer'; // gatherer, hunter, builder, farmer
+                this.health = 100;
+                this.hunger = 30;
+                this.energy = 100;
+                this.happiness = 80;
+                this.carrying = null;
+                this.carryAmount = 0;
+                this.state = 'idle'; // idle, gathering, hunting, building, eating, resting
+                this.age = 20;
+                this.gender = Math.random() > 0.5 ? 'male' : 'female';
+            }
+            
+            update() {
+                // Старение
+                this.age += 0.0001;
+                
+                // Двигаться к цели, если она есть
+                if (this.target) {
+                    const dx = this.target.x - this.x;
+                    const dy = this.target.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist > 5) {
+                        this.x += (dx / dist) * this.speed;
+                        this.y += (dy / dist) * this.speed;
+                    } else {
+                        // Достигли цели
+                        this.executeTask();
+                    }
+                } else {
+                    // Без цели, ищем задачу
+                    this.findTask();
+                }
+                
+                // Уменьшение показателей со временем
+                this.hunger += 0.02;
+                this.energy -= 0.01;
+                this.happiness -= 0.005;
+                
+                // Если голод превышает 80, уменьшается здоровье
+                if (this.hunger >= 80) {
+                    this.health -= 0.05;
+                }
+                
+                // Если энергия на нуле, уменьшается скорость
+                if (this.energy <= 0) {
+                    this.speed = 0.5;
+                    this.energy = 0;
+                } else {
+                    this.speed = 1 + Math.random() * 0.5;
+                }
+                
+                // Если счастье низкое, уменьшается эффективность
+                if (this.happiness <= 30) {
+                    this.speed *= 0.7;
+                }
+                
+                // Проверка на смерть
+                if (this.health <= 0) {
+                    this.health = 0;
+                    gameState.stats.deaths++;
+                    addEvent(`${this.name} умер(ла) от голода или истощения!`, 'bad');
+                    // Удаляем этого поселенца
+                    const index = gameState.villagers.findIndex(v => v.id === this.id);
+                    if (index !== -1) {
+                        gameState.villagers.splice(index, 1);
+                    }
+                }
+                
+                // Проверка на возможность рождения ребенка
+                if (this.gender === 'female' && this.age >= 18 && this.age <= 40 && 
+                    gameState.villagers.length < getMaxVillagers() && 
+                    Math.random() < 0.0005 && this.happiness > 70) {
+                    this.giveBirth();
+                }
+            }
+            
+            executeTask() {
+                switch (this.state) {
+                    case 'gathering':
+                        if (this.role === 'gatherer') {
+                            const resourceType = Math.random() > 0.5 ? 'wood' : 'food';
+                            this.carrying = resourceType;
+                            this.carryAmount = 5 + Math.floor(Math.random() * 5);
+                            this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
+                            this.state = 'returning';
+                        }
+                        break;
+                    case 'returning':
+                        gameState.resources[this.carrying] += this.carryAmount;
+                        this.carrying = null;
+                        this.carryAmount = 0;
+                        this.findTask();
+                        break;
+                    case 'eating':
+                        if (gameState.resources.food >= 10) {
+                            gameState.resources.food -= 10;
+                            this.hunger = Math.max(0, this.hunger - 40);
+                            this.happiness += 5;
+                            this.state = 'idle';
+                            this.target = null;
+                        } else {
+                            this.state = 'idle';
+                            this.target = null;
+                        }
+                        break;
+                    case 'resting':
+                        this.energy = Math.min(100, this.energy + 40);
+                        this.health = Math.min(100, this.health + 5);
+                        this.state = 'idle';
+                        this.target = null;
+                        break;
+                }
+            }
+            
+            findTask() {
+                // Определяем задачу в зависимости от роли и потребностей
+                if (this.hunger > 70) {
+                    this.state = 'eating';
+                    this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
+                    return;
+                }
+                
+                if (this.energy < 30) {
+                    this.state = 'resting';
+                    this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
+                    return;
+                }
+                
+                switch (this.role) {
+                    case 'gatherer':
+                        this.state = 'gathering';
+                        this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
+                        break;
+                    default:
+                        this.state = 'idle';
+                        this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
+                }
+            }
+            
+            giveBirth() {
+                const names = ['Аник', 'Бран', 'Вир', 'Гон', 'Дар', 'Ера', 'Жед', 'Зан', 'Иль', 'Кор'];
+                const gender = Math.random() > 0.5 ? 'male' : 'female';
+                const name = names[Math.floor(Math.random() * names.length)];
+                
+                const child = new Villager(name);
+                child.age = 0;
+                child.gender = gender;
+                child.health = 100;
+                child.hunger = 30;
+                child.energy = 100;
+                child.happiness = 80;
+                
+                gameState.villagers.push(child);
+                gameState.stats.births++;
+                addEvent(`Родился новый член племени: ${name}!`, 'good');
+            }
+            
+            draw() {
+                // Рисуем поселенца как red_guy.png
+                ctx.drawImage(redGuyImg, this.x - 20, this.y - 20, 40, 40);
+                
+                // Рисуем индикатор роли
+                ctx.fillStyle = 'white';
+                ctx.font = '12px Arial';
+                ctx.fillText(this.role, this.x - 15, this.y - 25);
+                
+                // Рисуем индикатор состояния
+                ctx.fillText(this.state, this.x - 15, this.y - 40);
+                
+                // Рисуем индикатор здоровья
+                ctx.fillStyle = 'red';
+                ctx.fillRect(this.x - 15, this.y - 30, 30, 5);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(this.x - 15, this.y - 30, 30 * (this.health / 100), 5);
+            }
+        }
+        
+        // Класс здания
+        class Building {
+            constructor(type, x, y) {
+                this.type = type;
+                this.x = x;
+                this.y = y;
+                this.width = 80;
+                this.height = 80;
+            }
+            
+            draw() {
+                // Рисуем здание как basic_house.png
+                ctx.drawImage(basicHouseImg, this.x - this.width/2, this.y - this.height/2, this.width, this.height);
+            }
+        }
+        
+        // Вспомогательные функции
+        function getMaxVillagers() {
+            const huts = gameState.buildings.find(b => b.type === 'hut');
+            return huts ? huts.count * 5 : 10;
+        }
+        
+        function addEvent(text, type = 'neutral') {
+            const eventLog = document.getElementById('eventLog');
+            const eventElement = document.createElement('div');
+            eventElement.className = `event ${type}`;
+            eventElement.textContent = `День ${gameState.day}: ${text}`;
+            eventLog.prepend(eventElement);
+            
+            // Ограничиваем количество событий в логе
+            if (eventLog.children.length > 10) {
+                eventLog.removeChild(eventLog.lastChild);
+            }
+            
+            // Сохраняем событие в истории
+            gameState.events.unshift({ day: gameState.day, text, type });
+        }
+        
+        // Инициализация игры
+        function initGame() {
+            // Создаем начальных поселенцев
+            const initialNames = ['Аник', 'Бран', 'Вир'];
+            initialNames.forEach(name => {
+                gameState.villagers.push(new Villager(name));
+            });
+            
+            // Запускаем игровой цикл
+            gameLoop();
+            
+            // Обновляем интерфейс каждые 500ms
+            setInterval(updateUI, 500);
+        }
+        
+        // Игровой цикл
+        function gameLoop() {
+            // Очищаем canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Рисуем фон в зависимости от времени суток
+            drawBackground();
+            
+            // Рисуем здания
+            if (gameState.buildings) {
+                gameState.buildings.forEach(building => {
+                    // Для простоты просто рисуем одно здание в центре
+                    ctx.drawImage(basicHouseImg, canvas.width/2 - 40, canvas.height/2 - 40, 80, 80);
+                });
+            }
+            
+            // Обновляем и рисуем поселенцев
+            gameState.villagers.forEach(villager => {
+                villager.update();
+                villager.draw();
+            });
+            
+            // Обновляем время
+            gameState.time += 0.001 * gameState.gameSpeed;
+            if (gameState.time >= 1) {
+                gameState.time = 0;
+                gameState.day++;
+                
+                // Каждый день потребляется еда
+                const foodConsumption = gameState.villagers.length * 5;
+                gameState.resources.food -= foodConsumption;
+                if (gameState.resources.food < 0) gameState.resources.food = 0;
+                
+                // Каждые 10 дней смена сезона
+                if (gameState.day % 10 === 0) {
+                    gameState.season = (gameState.season + 1) % 4;
+                    
+                    // Эффекты сезонов
+                    const seasons = ['Весна', 'Лето', 'Осень', 'Зима'];
+                    addEvent(`Наступила ${seasons[gameState.season]}.`, 'neutral');
+                    
+                    if (gameState.season === 3) { // Зима
+                        addEvent('Суровая зима! Сбор ресурсов уменьшен.', 'bad');
+                    }
+                }
+                
+                // Случайные события
+                if (Math.random() < 0.1) {
+                    const events = [
+                        { text: 'Найдены дополнительные ресурсы!', effect: () => { gameState.resources.wood += 20; gameState.resources.food += 15; }, type: 'good' },
+                        { text: 'Нападение диких зверей! Потеряны ресурсы.', effect: () => { gameState.resources.food = Math.max(0, gameState.resources.food - 20); }, type: 'bad' },
+                        { text: 'Племя открыло новый метод сбора ресурсов!', effect: () => { gameState.villagers.forEach(v => { if (v.role === 'gatherer') v.speed += 0.2; }); }, type: 'good' }
+                    ];
+                    
+                    const event = events[Math.floor(Math.random() * events.length)];
+                    event.effect();
+                    addEvent(event.text, event.type);
+                }
+            }
+            
+            // Проверяем условия победы/поражения
+            if (gameState.villagers.length === 0) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Племя вымерло!', canvas.width / 2, canvas.height / 2);
+                ctx.font = '24px Arial';
+                ctx.fillText(`Вы прожили ${gameState.day} дней`, canvas.width / 2, canvas.height / 2 + 50);
+                return;
+            }
+            
+            if (gameState.villagers.length >= 50) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Победа!', canvas.width / 2, canvas.height / 2);
+                ctx.font = '24px Arial';
+                ctx.fillText('Ваше племя стало могущественным!', canvas.width / 2, canvas.height / 2 + 50);
+                return;
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Функция отрисовки фона
+        function drawBackground() {
+            // Рисуем небо в зависимости от времени суток
+            const time = gameState.time;
+            let skyColor;
+            
+            if (time < 0.25) {
+                // Ночь
+                skyColor = '#0c1445';
+            } else if (time < 0.5) {
+                // Утро
+                const progress = (time - 0.25) * 4;
+                skyColor = `rgb(${12 + progress * 100}, ${20 + progress * 120}, ${69 + progress * 60})`;
+            } else if (time < 0.75) {
+                // День
+                skyColor = '#87ceeb';
+            } else {
+                // Вечер
+                const progress = (time - 0.75) * 4;
+                skyColor = `rgb(${135 - progress * 50}, ${135 - progress * 50}, ${235 - progress * 100})`;
+            }
+            
+            ctx.fillStyle = skyColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Рисуем землю
+            ctx.fillStyle = '#5a3c1e';
+            ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+            
+            // Рисуем траву
+            ctx.fillStyle = '#3c6b30';
+            ctx.fillRect(0, canvas.height - 100, canvas.width, 20);
+            
+            // Рисуем ресурсы (упрощенно)
+            ctx.fillStyle = '#8b5a2b';
+            for (let i = 0; i < 10; i++) {
+                ctx.beginPath();
+                ctx.arc(100 + i * 70, canvas.height - 80, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Рисуем солнце/луну
+            ctx.fillStyle = time < 0.25 || time > 0.75 ? '#ffffff' : '#ffde37';
+            const celestialX = canvas.width * time;
+            const celestialY = 100 + Math.sin(time * Math.PI * 2) * 50;
+            ctx.beginPath();
+            ctx.arc(celestialX, celestialY, 30, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Обновление интерфейса
+        function updateUI() {
+            // Обновляем ресурсы
+            document.getElementById('foodCount').textContent = Math.floor(gameState.resources.food);
+            document.getElementById('woodCount').textContent = Math.floor(gameState.resources.wood);
+            document.getElementById('stoneCount').textContent = Math.floor(gameState.resources.stone);
+            document.getElementById('hideCount').textContent = Math.floor(gameState.resources.hide);
+            
+            // Обновляем счетчики
+            document.getElementById('dayCount').textContent = gameState.day;
+            document.getElementById('populationCount').textContent = gameState.villagers.length;
+            document.getElementById('villagersCount').textContent = gameState.villagers.length;
+            document.getElementById('maxVillagers').textContent = getMaxVillagers();
+            document.getElementById('birthsCount').textContent = gameState.stats.births;
+            document.getElementById('deathsCount').textContent = gameState.stats.deaths;
+            
+            // Обновляем время суток и сезон
+            const time = gameState.time;
+            let timeOfDay;
+            if (time < 0.25) timeOfDay = "Ночь";
+            else if (time < 0.5) timeOfDay = "Утро";
+            else if (time < 0.75) timeOfDay = "День";
+            else timeOfDay = "Вечер";
+            
+            const seasons = ["Весна", "Лето", "Осень", "Зима"];
+            document.getElementById('timeOfDay').textContent = timeOfDay;
+            document.getElementById('dateDisplay').textContent = `День ${gameState.day}, ${seasons[gameState.season]}`;
+            document.getElementById('seasonDisplay').textContent = seasons[gameState.season];
+            document.getElementById('seasonDisplay').className = 'season-display ' + seasons[gameState.season].toLowerCase();
+            
+            // Обновляем список поселенцев
+            const villagersList = document.getElementById('villagersList');
+            villagersList.innerHTML = '';
+            
+            gameState.villagers.forEach(villager => {
+                const villagerEl = document.createElement('div');
+                villagerEl.className = 'villager';
+                villagerEl.innerHTML = `
+                    <div>
+                        <span class="villager-name">${villager.name}</span>
+                        <span class="villager-role">(${villager.role})</span>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>Здоровье</span>
+                            <span>${Math.floor(villager.health)}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill health" style="width: ${villager.health}%"></div>
+                        </div>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>Сытость</span>
+                            <span>${Math.floor(100 - villager.hunger)}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill food" style="width: ${100 - villager.hunger}%"></div>
+                        </div>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>Энергия</span>
+                            <span>${Math.floor(villager.energy)}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill energy" style="width: ${villager.energy}%"></div>
+                        </div>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>Настроение</span>
+                            <span>${Math.floor(villager.happiness)}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill happiness" style="width: ${villager.happiness}%"></div>
+                        </div>
+                    </div>
+                `;
+                villagersList.appendChild(villagerEl);
+            });
+            
+            // Обновляем состояние кнопок
+            document.getElementById('addVillagerBtn').disabled = 
+                gameState.resources.food < 50 || gameState.villagers.length >= getMaxVillagers();
+        }
+        
+        // Функции для магазина
+        function openShop() {
+            document.getElementById('shopModal').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+        }
+        
+        function closeShop() {
+            document.getElementById('shopModal').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+        }
+        
+        function buildHut() {
+            if (gameState.resources.wood >= 30 && gameState.resources.stone >= 10) {
+                gameState.resources.wood -= 30;
+                gameState.resources.stone -= 10;
+                
+                const hut = gameState.buildings.find(b => b.type === 'hut');
+                hut.count++;
+                
+                addEvent('Построена новая хижина. Максимальное население увеличилось.', 'good');
+                closeShop();
+            } else {
+                addEvent('Недостаточно ресурсов для постройки хижины!', 'bad');
+            }
+        }
+        
+        // Обработчики событий
+        document.getElementById('addVillagerBtn').addEventListener('click', () => {
+            if (gameState.resources.food >= 50 && gameState.villagers.length < getMaxVillagers()) {
+                gameState.resources.food -= 50;
+                const names = ['Аник', 'Бран', 'Вир', 'Гон', 'Дар', 'Ера', 'Жед', 'Зан', 'Иль', 'Кор'];
+                const name = names[Math.floor(Math.random() * names.length)];
+                const newVillager = new Villager(name);
+                gameState.villagers.push(newVillager);
+                addEvent(`Родился новый поселенец: ${name}!`, 'good');
+            }
+        });
+        
+        document.getElementById('shopBtn').addEventListener('click', openShop);
+        document.getElementById('closeShop').addEventListener('click', closeShop);
+        document.getElementById('buildHutBtnShop').addEventListener('click', buildHut);
+        
+        document.getElementById('gatherFoodBtn').addEventListener('click', () => {
+            gameState.villagers.forEach(villager => {
+                villager.task = 'gathering';
+                villager.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
+            });
+            addEvent('Все поселенцы отправлены собирать еду.', 'neutral');
+        });
+        
+        // Закрытие магазина при клике на overlay
+        document.getElementById('overlay').addEventListener('click', closeShop);
+        
+        // Запускаем игру при загрузке
+        window.onload = initGame;
+    </script>
+</body>
+</html>
