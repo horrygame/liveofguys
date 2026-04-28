@@ -2,535 +2,800 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Племя Древних</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🏰 Crystal Survivors</title>
+    
+    <!-- Yandex Games SDK -->
+    <script src="/sdk.js"></script>
+    
     <style>
-        body {
+        * {
             margin: 0;
-            padding: 20px;
-            font-family: 'Arial', sans-serif;
-            background: #1a5c2d;
-            color: #fff;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a1a;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
-        .game-container {
-            display: flex;
-            gap: 20px;
-            margin-top: 20px;
+        canvas {
+            border: 2px solid #FFD700;
+            display: block;
         }
         
-        #gameCanvas {
-            background: #7cae7a;
-            border: 3px solid #5a8158;
-            border-radius: 5px;
-        }
-        
-        .ui-panel {
-            background: rgba(69, 97, 60, 0.8);
-            border-radius: 8px;
-            padding: 15px;
-            width: 250px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-        }
-        
-        h1 {
-            color: #f5d547;
-            text-shadow: 2px 2px 0 #000;
-            margin-bottom: 10px;
-        }
-        
-        h2 {
-            color: #f5d547;
-            border-bottom: 2px solid #f5d547;
-            padding-bottom: 5px;
-        }
-        
-        .resource {
-            display: flex;
-            justify-content: space-between;
-            margin: 8px 0;
-            padding: 5px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-        }
-        
-        .villager {
-            margin: 10px 0;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-        }
-        
-        button {
-            background: #f5d547;
-            color: #333;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 4px;
-            margin: 5px 0;
-            cursor: pointer;
-            font-weight: bold;
-            width: 100%;
-        }
-        
-        button:hover {
-            background: #e6c63d;
-        }
-        
-        .progress-bar {
-            height: 10px;
-            background: #444;
-            border-radius: 5px;
-            margin: 5px 0;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            border-radius: 5px;
-        }
-        
-        .health { background: #e74c3c; }
-        .food { background: #2ecc71; }
-        .energy { background: #3498db; }
-        
-        .time-display {
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #FFD700;
+            font-size: 24px;
+            font-family: 'Arial', sans-serif;
             text-align: center;
-            font-size: 18px;
-            margin: 10px 0;
-            padding: 5px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 5px;
-        }
-        
-        .stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .stat {
-            background: rgba(0, 0, 0, 0.2);
-            padding: 8px;
-            border-radius: 4px;
-            text-align: center;
+            pointer-events: none;
+            z-index: 10;
         }
     </style>
 </head>
 <body>
-    <h1>Племя Древних</h1>
-    <p>Управляйте своим поселением, чтобы помочь древним людям выжить</p>
+    <div id="loading">Загрузка...</div>
+    <canvas id="gameCanvas"></canvas>
     
-    <div class="game-container">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
-        
-        <div class="ui-panel">
-            <h2>Ресурсы</h2>
-            <div class="resource">
-                <span>Еда:</span>
-                <span id="foodCount">50</span>
-            </div>
-            <div class="resource">
-                <span>Дерево:</span>
-                <span id="woodCount">30</span>
-            </div>
-            <div class="resource">
-                <span>Камень:</span>
-                <span id="stoneCount">15</span>
-            </div>
-            <div class="resource">
-                <span>Кожи:</span>
-                <span id="hideCount">5</span>
-            </div>
-            
-            <h2>Поселенцы</h2>
-            <div id="villagersList">
-                <!-- Сюда будут добавляться поселенцы -->
-            </div>
-            
-            <h2>Действия</h2>
-            <button id="addVillagerBtn">Новый поселенец (50 еды)</button>
-            <button id="buildHutBtn">Построить хижину (30 дерева)</button>
-            <button id="gatherFoodBtn">Собирать еду</button>
-            <button id="gatherWoodBtn">Собирать дерево</button>
-            
-            <div class="stats">
-                <div class="stat">
-                    <div>День</div>
-                    <div id="dayCount">1</div>
-                </div>
-                <div class="stat">
-                    <div>Население</div>
-                    <div id="populationCount">3</div>
-                </div>
-            </div>
-            
-            <div class="time-display">
-                <div id="timeOfDay">День</div>
-                <div id="season">Весна</div>
-            </div>
-        </div>
-    </div>
-
     <script>
-        // Основные переменные игры
+        // ==================== YANDEX SDK ====================
+        let ysdk = null;
+        
+        async function initSDK() {
+            try {
+                if (typeof YaGames !== 'undefined') {
+                    ysdk = await YaGames.init();
+                    console.log('✅ SDK ready');
+                }
+            } catch(e) {
+                console.log('SDK not available');
+            }
+        }
+        
+        // ==================== SPRITES ====================
+        const sprites = {};
+        
+        function loadSprite(key, path) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    sprites[key] = img;
+                    console.log('✅', key);
+                    resolve();
+                };
+                img.onerror = () => {
+                    console.log('❌', key, '- using fallback');
+                    sprites[key] = null; // Будем рисовать примитивами
+                    resolve();
+                };
+                img.src = path;
+            });
+        }
+        
+        async function loadAllSprites() {
+            const paths = {
+                'blue_idle': 'sprites/creatures/blue_idle.png',
+                'blue_scared': 'sprites/creatures/blue_scared.png',
+                'red': 'sprites/creatures/red.png',
+                'red_sleep': 'sprites/creatures/red_sleep.png',
+                'crystal': 'sprites/items/crystal.png',
+                'shield': 'sprites/items/shield.png',
+                'tree': 'sprites/items/tree.png',
+                'rock': 'sprites/items/stone.png',
+                'wall_wood': 'sprites/buildings/wall_wood.png',
+                'wall_stone': 'sprites/buildings/wall_stone.png',
+                'totem_light': 'sprites/buildings/totem_light.png',
+                'tower_wood': 'sprites/buildings/tower_wood.png',
+                'tower_stone': 'sprites/buildings/tower_stone.png',
+                'teleport': 'sprites/buildings/teleport.png',
+                'trap_time': 'sprites/traps/trap_time.png',
+                'trap_fire': 'sprites/traps/trap_fire.png',
+                'ui_crystal': 'sprites/ui/crystal.png',
+                'day': 'sprites/ui/day.png',
+                'night': 'sprites/ui/night.png'
+            };
+            
+            // Загружаем с таймаутом - если за 3 секунды не загрузились, используем fallback
+            const promises = [];
+            for (const [key, path] of Object.entries(paths)) {
+                promises.push(loadSprite(key, path));
+            }
+            
+            // Добавляем таймаут на случай зависания
+            const timeout = new Promise((resolve) => {
+                setTimeout(() => {
+                    console.log('⏰ Sprite loading timeout - using fallbacks');
+                    resolve();
+                }, 3000);
+            });
+            
+            await Promise.race([
+                Promise.all(promises),
+                timeout
+            ]);
+            
+            console.log(`📦 Sprites: ${Object.values(sprites).filter(s => s !== null).length}/${Object.keys(sprites).length} loaded`);
+        }
+        
+        // ==================== CONFIG ====================
+        const CONFIG = {
+            SIZE_X: 25, SIZE_Y: 18, CELL: 32,
+            DAY_DURATION: 60, NIGHT_DURATION: 30,
+            START_WOOD: 5, START_STONE: 3, START_CRYSTALS: 2,
+            WOOD_WALL_COST: 3, STONE_WALL_COST: 5,
+            WOOD_TOWER_COST: 8, STONE_TOWER_COST: 12,
+            TOTEM_LIGHT_COST: 8, TIME_TRAP_COST: 5,
+            FIRE_TRAP_COST: 7, TELEPORT_COST: 10,
+            TREE_SPAWN_COUNT: 20, ROCK_SPAWN_COUNT: 12,
+            RED_SPEED_MULTIPLIER: 0.08,
+            RED_BASE_HP: 3, RED_HP_INCREASE: 1,
+            RED_SPAWN_BASE: 3, RED_SPAWN_INCREASE_EVERY: 2,
+            WOOD_WALL_BREAK_TIME: 5, STONE_WALL_BREAK_TIME: 15,
+            SHIELD_DURATION: 5, TOWER_COOLDOWN: 1.0,
+            MOVE_DURATION: 0.15
+        };
+        
+        // ==================== CANVAS ====================
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        // Состояние игры
-        const gameState = {
-            resources: {
-                food: 50,
-                wood: 30,
-                stone: 15,
-                hide: 5
-            },
-            villagers: [],
-            buildings: [],
-            day: 1,
-            time: 0, // 0-1, где 0 - полночь, 0.5 - полдень
-            season: 0, // 0-весна, 1-лето, 2-осень, 3-зима
-            selectedVillager: null,
-            gameSpeed: 1
+        function resizeCanvas() {
+            const w = Math.min(window.innerWidth - 20, 1000);
+            const h = Math.min(window.innerHeight - 20, 700);
+            const ratio = CONFIG.SIZE_X / CONFIG.SIZE_Y;
+            let cw, ch;
+            if (w / h > ratio) { ch = h; cw = ch * ratio; }
+            else { cw = w; ch = cw / ratio; }
+            CONFIG.CELL = Math.floor(Math.max(cw / CONFIG.SIZE_X, 20));
+            canvas.width = CONFIG.CELL * CONFIG.SIZE_X;
+            canvas.height = CONFIG.CELL * CONFIG.SIZE_Y + 70;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // ==================== GAME STATE ====================
+        const gs = {
+            walls: new Map(), blueUnits: [], redUnits: [], resources: [],
+            towers: [], traps: [], totems: [], teleports: [], bullets: [],
+            woodCount: CONFIG.START_WOOD, stoneCount: CONFIG.START_STONE,
+            crystals: CONFIG.START_CRYSTALS, gamePhase: 'menu',
+            currentNight: 1, timeLeft: CONFIG.DAY_DURATION,
+            selectedBuilding: null, nearbyObject: null,
+            message: '', messageTime: 0, wallAttacks: new Map(),
+            blueIsMoving: false, blueMoveStartX: 0, blueMoveStartY: 0,
+            blueTargetX: 0, blueTargetY: 0, blueMoveStartTime: 0,
+            redMoves: new Map(), score: 0,
+            bestScore: parseInt(localStorage.getItem('cs_best') || '0')
         };
         
-        // Класс поселенца
-        class Villager {
-            constructor() {
-                this.id = Math.random().toString(36).substr(2, 9);
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.size = 20;
-                this.color = `hsl(${Math.random() * 360}, 70%, 60%)`;
-                this.speed = 1 + Math.random() * 0.5;
-                this.target = null;
-                this.task = 'idle';
-                this.health = 100;
-                this.food = 100;
-                this.energy = 100;
-                this.carrying = null;
-                this.carryAmount = 0;
+        // ==================== HELPERS ====================
+        function posFree(x, y) {
+            const k = `${x},${y}`;
+            if (gs.walls.has(k)) return false;
+            if (gs.towers.some(t=>t.x==x&&t.y==y)) return false;
+            if (gs.traps.some(t=>t.x==x&&t.y==y)) return false;
+            if (gs.totems.some(t=>t.x==x&&t.y==y)) return false;
+            if (gs.teleports.some(t=>t.x==x&&t.y==y)) return false;
+            return true;
+        }
+        
+        function msg(t, d=2) {
+            gs.message = t;
+            gs.messageTime = Date.now() + d*1000;
+        }
+        
+        function redHP(n) { return CONFIG.RED_BASE_HP + (n-1)*CONFIG.RED_HP_INCREASE; }
+        function redCount(n) { return CONFIG.RED_SPAWN_BASE + Math.floor((n-1)/CONFIG.RED_SPAWN_INCREASE_EVERY); }
+        function wallKey(x,y) { return `${x},${y}`; }
+        
+        // ==================== WORLD GEN ====================
+        function genWorld() {
+            gs.resources = [];
+            for(let i=0;i<CONFIG.TREE_SPAWN_COUNT;i++) {
+                for(let a=0;a<100;a++) {
+                    const x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
+                    const y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
+                    if(posFree(x,y)&&!gs.resources.some(r=>r.x==x&&r.y==y)) {
+                        gs.resources.push({x,y,type:'tree'}); break;
+                    }
+                }
+            }
+            for(let i=0;i<CONFIG.ROCK_SPAWN_COUNT;i++) {
+                for(let a=0;a<100;a++) {
+                    const x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
+                    const y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
+                    if(posFree(x,y)&&!gs.resources.some(r=>r.x==x&&r.y==y)) {
+                        gs.resources.push({x,y,type:'rock'}); break;
+                    }
+                }
+            }
+            for(let i=0;i<5;i++) {
+                for(let a=0;a<100;a++) {
+                    const x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
+                    const y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
+                    if(posFree(x,y)&&!gs.resources.some(r=>r.x==x&&r.y==y)) {
+                        const t=['crystal','shield','speed'][Math.floor(Math.random()*3)];
+                        gs.resources.push({x,y,type:t}); break;
+                    }
+                }
+            }
+        }
+        
+        function genInitial() {
+            gs.walls.clear(); gs.blueUnits=[]; gs.redUnits=[];
+            gs.resources=[]; gs.towers=[]; gs.traps=[];
+            gs.totems=[]; gs.teleports=[]; gs.bullets=[];
+            gs.wallAttacks.clear(); gs.redMoves.clear();
+            
+            for(let i=0;i<CONFIG.SIZE_X;i++) {
+                gs.walls.set(wallKey(i,0),{hp:999,maxHp:999,type:'border'});
+                gs.walls.set(wallKey(i,CONFIG.SIZE_Y-1),{hp:999,maxHp:999,type:'border'});
+            }
+            for(let i=0;i<CONFIG.SIZE_Y;i++) {
+                gs.walls.set(wallKey(0,i),{hp:999,maxHp:999,type:'border'});
+                gs.walls.set(wallKey(CONFIG.SIZE_X-1,i),{hp:999,maxHp:999,type:'border'});
             }
             
-            update() {
-                // Двигаться к цели, если она есть
-                if (this.target) {
-                    const dx = this.target.x - this.x;
-                    const dy = this.target.y - this.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (dist > 5) {
-                        this.x += (dx / dist) * this.speed;
-                        this.y += (dy / dist) * this.speed;
-                    } else {
-                        // Достигли цели
-                        if (this.task === 'gatherFood') {
-                            this.carrying = 'food';
-                            this.carryAmount = 5;
-                            this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-                            this.task = 'returnFood';
-                        } else if (this.task === 'returnFood') {
-                            gameState.resources.food += this.carryAmount;
-                            this.carrying = null;
-                            this.carryAmount = 0;
-                            this.findTask();
-                        } else if (this.task === 'gatherWood') {
-                            this.carrying = 'wood';
-                            this.carryAmount = 3;
-                            this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-                            this.task = 'returnWood';
-                        } else if (this.task === 'returnWood') {
-                            gameState.resources.wood += this.carryAmount;
-                            this.carrying = null;
-                            this.carryAmount = 0;
-                            this.findTask();
+            while(true) {
+                const x=5+Math.floor(Math.random()*(CONFIG.SIZE_X-10));
+                const y=3+Math.floor(Math.random()*(CONFIG.SIZE_Y-6));
+                if(!gs.walls.has(wallKey(x,y))) {
+                    gs.blueUnits.push({x,y,hasShield:false,shieldReady:true});
+                    break;
+                }
+            }
+            
+            gs.woodCount=CONFIG.START_WOOD; gs.stoneCount=CONFIG.START_STONE;
+            gs.crystals=CONFIG.START_CRYSTALS;
+            genWorld();
+        }
+        
+        function spawnReds() {
+            gs.redUnits=[];
+            const c=redCount(gs.currentNight), hp=redHP(gs.currentNight);
+            for(let i=0;i<c;i++) {
+                while(true) {
+                    const s=['top','bottom','left','right'][Math.floor(Math.random()*4)];
+                    let x,y;
+                    if(s=='top'){x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));y=1;}
+                    else if(s=='bottom'){x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));y=CONFIG.SIZE_Y-2;}
+                    else if(s=='left'){x=1;y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));}
+                    else{x=CONFIG.SIZE_X-2;y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));}
+                    if(!gs.walls.has(wallKey(x,y))){gs.redUnits.push({x,y,hp});break;}
+                }
+            }
+        }
+        
+        // ==================== BFS ====================
+        function bfs(start,target) {
+            const q=[start], cf=new Map();
+            cf.set(`${start.x},${start.y}`,null);
+            while(q.length>0) {
+                const c=q.shift();
+                if(c.x==target.x&&c.y==target.y) break;
+                for(const d of[{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}]) {
+                    const nx=c.x+d.dx,ny=c.y+d.dy;
+                    const nk=`${nx},${ny}`;
+                    if(nx<0||nx>=CONFIG.SIZE_X||ny<0||ny>=CONFIG.SIZE_Y) continue;
+                    if(gs.walls.has(nk)) continue;
+                    if(cf.has(nk)) continue;
+                    cf.set(nk,`${c.x},${c.y}`);
+                    q.push({x:nx,y:ny});
+                }
+            }
+            const tk=`${target.x},${target.y}`;
+            if(!cf.has(tk)) return null;
+            const path=[];
+            let ck=tk;
+            while(ck!==`${start.x},${start.y}`) {
+                const [x,y]=ck.split(',').map(Number);
+                path.unshift({x,y});
+                ck=cf.get(ck);
+            }
+            return path;
+        }
+        
+        // ==================== MOVEMENT ====================
+        function moveBlue(dx,dy) {
+            if(gs.gamePhase!='day'&&gs.gamePhase!='night') return;
+            if(!gs.blueUnits.length||gs.blueIsMoving) return;
+            const b=gs.blueUnits[0];
+            const nx=Math.round(b.x)+dx, ny=Math.round(b.y)+dy;
+            if(gs.walls.has(wallKey(nx,ny))) return;
+            if(gs.towers.some(t=>t.x==nx&&t.y==ny)) return;
+            if(gs.traps.some(t=>t.x==nx&&t.y==ny)) return;
+            if(gs.totems.some(t=>t.x==nx&&t.y==ny)) return;
+            if(gs.teleports.some(t=>t.x==nx&&t.y==ny)) return;
+            gs.blueIsMoving=true;
+            gs.blueMoveStartX=Math.round(b.x);
+            gs.blueMoveStartY=Math.round(b.y);
+            gs.blueTargetX=nx; gs.blueTargetY=ny;
+            gs.blueMoveStartTime=Date.now()/1000;
+        }
+        
+        function updBlue() {
+            if(!gs.blueIsMoving) return;
+            const t=(Date.now()/1000)-gs.blueMoveStartTime;
+            if(t>=CONFIG.MOVE_DURATION) {
+                gs.blueUnits[0].x=gs.blueTargetX;
+                gs.blueUnits[0].y=gs.blueTargetY;
+                gs.blueIsMoving=false;
+                for(const tel of gs.teleports) {
+                    if(Math.round(gs.blueUnits[0].x)==tel.x&&Math.round(gs.blueUnits[0].y)==tel.y) {
+                        for(let a=0;a<50;a++) {
+                            const nx=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
+                            const ny=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
+                            if(posFree(nx,ny)&&(nx!=tel.x||ny!=tel.y)) {
+                                gs.blueUnits[0].x=nx; gs.blueUnits[0].y=ny;
+                                msg('🌀 Телепортация!'); break;
+                            }
                         }
-                    }
-                } else {
-                    // Без цели, ищем задачу
-                    this.findTask();
-                }
-                
-                // Уменьшение показателей со временем
-                this.food -= 0.02;
-                this.energy -= 0.01;
-                
-                // Если еда на нуле, уменьшается здоровье
-                if (this.food <= 0) {
-                    this.health -= 0.05;
-                    this.food = 0;
-                }
-                
-                // Если энергия на нуле, уменьшается скорость
-                if (this.energy <= 0) {
-                    this.speed = 0.5;
-                    this.energy = 0;
-                } else {
-                    this.speed = 1 + Math.random() * 0.5;
-                }
-                
-                // Проверка на смерть
-                if (this.health <= 0) {
-                    this.health = 0;
-                    // Удаляем этого поселенца
-                    const index = gameState.villagers.findIndex(v => v.id === this.id);
-                    if (index !== -1) {
-                        gameState.villagers.splice(index, 1);
+                        break;
                     }
                 }
-            }
-            
-            findTask() {
-                // Простой ИИ для выбора задачи
-                if (this.food < 30) {
-                    // Если голоден, ищет еду
-                    this.task = 'eat';
-                    this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-                } else if (this.energy < 30) {
-                    // Если устал, "отдыхает"
-                    this.task = 'rest';
-                    this.energy += 0.5;
-                } else {
-                    // Иначе выполняет общую задачу
-                    if (gameState.resources.food < 50) {
-                        this.task = 'gatherFood';
-                        this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-                    } else if (gameState.resources.wood < 40) {
-                        this.task = 'gatherWood';
-                        this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-                    } else {
-                        this.task = 'idle';
-                        this.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-                    }
-                }
-            }
-            
-            draw() {
-                // Рисуем поселенца
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Рисуем индикатор задачи
-                ctx.fillStyle = 'white';
-                ctx.font = '12px Arial';
-                ctx.fillText(this.task, this.x - 15, this.y - 25);
-                
-                // Рисуем индикатор здоровья
-                ctx.fillStyle = 'red';
-                ctx.fillRect(this.x - 15, this.y - 30, 30, 5);
-                ctx.fillStyle = 'green';
-                ctx.fillRect(this.x - 15, this.y - 30, 30 * (this.health / 100), 5);
-            }
-        }
-        
-        // Инициализация игры
-        function initGame() {
-            // Создаем начальных поселенцев
-            for (let i = 0; i < 3; i++) {
-                gameState.villagers.push(new Villager());
-            }
-            
-            // Запускаем игровой цикл
-            gameLoop();
-            
-            // Обновляем интерфейс каждые 500ms
-            setInterval(updateUI, 500);
-        }
-        
-        // Игровой цикл
-        function gameLoop() {
-            // Очищаем canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Рисуем фон в зависимости от времени суток
-            drawBackground();
-            
-            // Обновляем и рисуем поселенцев
-            gameState.villagers.forEach(villager => {
-                villager.update();
-                villager.draw();
-            });
-            
-            // Обновляем время
-            gameState.time += 0.001 * gameState.gameSpeed;
-            if (gameState.time >= 1) {
-                gameState.time = 0;
-                gameState.day++;
-                
-                // Каждый день потребляется еда
-                const foodConsumption = gameState.villagers.length * 5;
-                gameState.resources.food -= foodConsumption;
-                if (gameState.resources.food < 0) gameState.resources.food = 0;
-                
-                // Каждые 10 дней смена сезона
-                if (gameState.day % 10 === 0) {
-                    gameState.season = (gameState.season + 1) % 4;
-                }
-            }
-            
-            // Проверяем условия победы/поражения
-            if (gameState.villagers.length === 0) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = 'white';
-                ctx.font = '48px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Племя вымерло!', canvas.width / 2, canvas.height / 2);
-                ctx.font = '24px Arial';
-                ctx.fillText(`Вы прожили ${gameState.day} дней`, canvas.width / 2, canvas.height / 2 + 50);
-                return;
-            }
-            
-            if (gameState.villagers.length >= 20) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = 'white';
-                ctx.font = '48px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Победа!', canvas.width / 2, canvas.height / 2);
-                ctx.font = '24px Arial';
-                ctx.fillText('Ваше племя процветает!', canvas.width / 2, canvas.height / 2 + 50);
-                return;
-            }
-            
-            requestAnimationFrame(gameLoop);
-        }
-        
-        // Функция отрисовки фона
-        function drawBackground() {
-            // Рисуем небо в зависимости от времени суток
-            const time = gameState.time;
-            let skyColor;
-            
-            if (time < 0.25) {
-                // Ночь
-                skyColor = '#0c1445';
-            } else if (time < 0.5) {
-                // Утро
-                const progress = (time - 0.25) * 4;
-                skyColor = `rgb(${12 + progress * 100}, ${20 + progress * 120}, ${69 + progress * 60})`;
-            } else if (time < 0.75) {
-                // День
-                skyColor = '#87ceeb';
+                checkNearby();
             } else {
-                // Вечер
-                const progress = (time - 0.75) * 4;
-                skyColor = `rgb(${135 - progress * 50}, ${135 - progress * 50}, ${235 - progress * 100})`;
+                const p=t/CONFIG.MOVE_DURATION;
+                gs.blueUnits[0].x=gs.blueMoveStartX+(gs.blueTargetX-gs.blueMoveStartX)*p;
+                gs.blueUnits[0].y=gs.blueMoveStartY+(gs.blueTargetY-gs.blueMoveStartY)*p;
             }
-            
-            ctx.fillStyle = skyColor;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Рисуем землю
-            ctx.fillStyle = '#5a3c1e';
-            ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-            
-            // Рисуем траву
-            ctx.fillStyle = '#3c6b30';
-            ctx.fillRect(0, canvas.height - 100, canvas.width, 20);
-            
-            // Рисуем ресурсы (упрощенно)
-            ctx.fillStyle = '#8b5a2b';
-            for (let i = 0; i < 10; i++) {
-                ctx.beginPath();
-                ctx.arc(100 + i * 70, canvas.height - 80, 10, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillText('Дерево', 100 + i * 70 - 15, canvas.height - 95);
-            }
-            
-            // Рисуем солнце/луну
-            ctx.fillStyle = time < 0.25 || time > 0.75 ? '#ffffff' : '#ffde37';
-            const celestialX = canvas.width * time;
-            const celestialY = 100 + Math.sin(time * Math.PI * 2) * 50;
-            ctx.beginPath();
-            ctx.arc(celestialX, celestialY, 30, 0, Math.PI * 2);
-            ctx.fill();
         }
         
-        // Обновление интерфейса
-        function updateUI() {
-            // Обновляем ресурсы
-            document.getElementById('foodCount').textContent = Math.floor(gameState.resources.food);
-            document.getElementById('woodCount').textContent = Math.floor(gameState.resources.wood);
-            document.getElementById('stoneCount').textContent = Math.floor(gameState.resources.stone);
-            document.getElementById('hideCount').textContent = Math.floor(gameState.resources.hide);
-            
-            // Обновляем счетчики
-            document.getElementById('dayCount').textContent = gameState.day;
-            document.getElementById('populationCount').textContent = gameState.villagers.length;
-            
-            // Обновляем время суток и сезон
-            const time = gameState.time;
-            let timeOfDay;
-            if (time < 0.25) timeOfDay = "Ночь";
-            else if (time < 0.5) timeOfDay = "Утро";
-            else if (time < 0.75) timeOfDay = "День";
-            else timeOfDay = "Вечер";
-            
-            const seasons = ["Весна", "Лето", "Осень", "Зима"];
-            document.getElementById('timeOfDay').textContent = timeOfDay;
-            document.getElementById('season').textContent = seasons[gameState.season];
-            
-            // Обновляем список поселенцев
-            const villagersList = document.getElementById('villagersList');
-            villagersList.innerHTML = '';
-            
-            gameState.villagers.forEach(villager => {
-                const villagerEl = document.createElement('div');
-                villagerEl.className = 'villager';
-                villagerEl.innerHTML = `
-                    <div>Поселенец (${villager.task})</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill health" style="width: ${villager.health}%"></div>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill food" style="width: ${villager.food}%"></div>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill energy" style="width: ${villager.energy}%"></div>
-                    </div>
-                `;
-                villagersList.appendChild(villagerEl);
+        function moveRed(idx,tx,ty) {
+            if(idx>=gs.redUnits.length) return;
+            gs.redMoves.set(idx,{
+                sx:gs.redUnits[idx].x, sy:gs.redUnits[idx].y,
+                tx, ty, st:Date.now()/1000
             });
         }
         
-        // Обработчики событий
-        document.getElementById('addVillagerBtn').addEventListener('click', () => {
-            if (gameState.resources.food >= 50) {
-                gameState.resources.food -= 50;
-                gameState.villagers.push(new Villager());
+        function updReds() {
+            const now=Date.now()/1000;
+            for(const [i,m] of gs.redMoves) {
+                if(i>=gs.redUnits.length){gs.redMoves.delete(i);continue;}
+                const e=now-m.st;
+                if(e>=CONFIG.MOVE_DURATION) {
+                    gs.redUnits[i].x=m.tx; gs.redUnits[i].y=m.ty;
+                    gs.redMoves.delete(i);
+                } else {
+                    const p=e/CONFIG.MOVE_DURATION;
+                    gs.redUnits[i].x=m.sx+(m.tx-m.sx)*p;
+                    gs.redUnits[i].y=m.sy+(m.ty-m.sy)*p;
+                }
+            }
+        }
+        
+        // ==================== COMBAT ====================
+        function towersAtk() {
+            if(gs.gamePhase!='night') return;
+            const now=Date.now()/1000;
+            for(const t of gs.towers) {
+                if(now-t.ls<CONFIG.TOWER_COOLDOWN) continue;
+                let cr=null, cd=t.range+1;
+                for(const r of gs.redUnits) {
+                    if(r.hp<=0) continue;
+                    const d=Math.abs(t.x-Math.round(r.x))+Math.abs(t.y-Math.round(r.y));
+                    if(d<=t.range&&d<cd){cd=d;cr=r;}
+                }
+                if(cr){t.ls=now;gs.bullets.push({x:t.x,y:t.y,tx:Math.round(cr.x),ty:Math.round(cr.y),dmg:t.damage,st:now,tr:cr});}
+            }
+        }
+        
+        function updBullets() {
+            if(gs.gamePhase!='night') return;
+            const now=Date.now()/1000;
+            for(let i=gs.bullets.length-1;i>=0;i--) {
+                const b=gs.bullets[i];
+                const p=Math.min(1,(now-b.st)/0.3);
+                b.cx=b.x+(b.tx-b.x)*p; b.cy=b.y+(b.ty-b.y)*p;
+                if(p>=1) {
+                    if(b.tr.hp>0){b.tr.hp-=b.dmg;if(b.tr.hp<=0){const idx=gs.redUnits.indexOf(b.tr);if(idx!=-1)gs.redUnits.splice(idx,1);msg('💀 Убит!');}}
+                    gs.bullets.splice(i,1);
+                }
+            }
+        }
+        
+        function moveReds() {
+            if(gs.gamePhase!='night') return;
+            for(let i=gs.redUnits.length-1;i>=0;i--) {
+                const r=gs.redUnits[i]; if(r.hp<=0) continue;
+                if(!gs.blueUnits.length){gs.gamePhase='game_over';msg('💀 Поражение!',3);return;}
+                const b=gs.blueUnits[0], bp={x:Math.round(b.x),y:Math.round(b.y)};
+                const rp={x:Math.round(r.x),y:Math.round(r.y)};
+                if(rp.x==bp.x&&rp.y==bp.y) {
+                    if(b.hasShield&&!b.shieldReady){b.hasShield=false;b.shieldReady=false;msg('🛡️ Щит!');
+                        for(const d of[{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}]) {
+                            const nx=rp.x+d.dx,ny=rp.y+d.dy;
+                            if(nx>=0&&nx<CONFIG.SIZE_X&&ny>=0&&ny<CONFIG.SIZE_Y&&!gs.walls.has(wallKey(nx,ny))){moveRed(i,nx,ny);break;}
+                        }
+                    }else{gs.gamePhase='game_over';msg('💀 Конец!',3);return;}
+                }
+                const rk=wallKey(rp.x,rp.y);
+                if(gs.walls.has(rk)&&gs.walls.get(rk).hp<999){if(!gs.wallAttacks.has(rk)){gs.wallAttacks.set(rk,0);}continue;}
+                if(gs.wallAttacks.has(rk)) gs.wallAttacks.delete(rk);
+                const path=bfs(rp,bp);
+                if(path&&path.length>0&&Math.random()<CONFIG.RED_SPEED_MULTIPLIER) moveRed(i,path[0].x,path[0].y);
+            }
+        }
+        
+        function updWalls() {
+            if(gs.gamePhase!='night') return;
+            for(const [k,p] of gs.wallAttacks) {
+                if(!gs.walls.has(k)){gs.wallAttacks.delete(k);continue;}
+                const w=gs.walls.get(k); if(w.hp==999){gs.wallAttacks.delete(k);continue;}
+                const [wx,wy]=k.split(',').map(Number);
+                let on=false;
+                for(const r of gs.redUnits) if(r.hp>0&&Math.round(r.x)==wx&&Math.round(r.y)==wy){on=true;break;}
+                if(on) {
+                    const bt=w.type=='wood_wall'?CONFIG.WOOD_WALL_BREAK_TIME:CONFIG.STONE_WALL_BREAK_TIME;
+                    const np=p+1/60;
+                    if(np>=bt){gs.towers=gs.towers.filter(t=>t.x!=wx||t.y!=wy);gs.walls.delete(k);gs.wallAttacks.delete(k);msg('💥 Стена!');}
+                    else gs.wallAttacks.set(k,np);
+                }
+            }
+        }
+        
+        function actTraps() {
+            if(gs.gamePhase!='night') return;
+            for(let i=gs.traps.length-1;i>=0;i--) {
+                const t=gs.traps[i];
+                for(let j=gs.redUnits.length-1;j>=0;j--) {
+                    const r=gs.redUnits[j];
+                    if(Math.round(r.x)==t.x&&Math.round(r.y)==t.y) {
+                        if(t.type=='fire'){r.hp-=2;gs.crystals++;msg('🔥 +1💎');}
+                        else msg('⏳ Заморозка!');
+                        gs.traps.splice(i,1); break;
+                    }
+                }
+            }
+        }
+        
+        // ==================== INTERACTION ====================
+        function checkNearby() {
+            if(!gs.blueUnits.length){gs.nearbyObject=null;return;}
+            const bx=Math.round(gs.blueUnits[0].x), by=Math.round(gs.blueUnits[0].y);
+            for(const r of gs.resources) if(Math.abs(r.x-bx)+Math.abs(r.y-by)<=1){gs.nearbyObject={type:'resource',data:r};return;}
+            for(const [k,w] of gs.walls) {
+                if(w.type=='border') continue;
+                const [wx,wy]=k.split(',').map(Number);
+                if(Math.abs(wx-bx)+Math.abs(wy-by)<=1){gs.nearbyObject={type:'wall',x:wx,y:wy,wt:w.type};return;}
+            }
+            for(let i=0;i<gs.towers.length;i++){const t=gs.towers[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'tower',idx:i};return;}}
+            for(let i=0;i<gs.traps.length;i++){const t=gs.traps[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'trap',idx:i};return;}}
+            for(let i=0;i<gs.totems.length;i++){const t=gs.totems[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'totem',idx:i};return;}}
+            for(let i=0;i<gs.teleports.length;i++){const t=gs.teleports[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'teleport',idx:i};return;}}
+            gs.nearbyObject=null;
+        }
+        
+        function collect() {
+            if(!gs.blueUnits.length||gs.gamePhase!='day'){msg('❌ Только днём!');return;}
+            checkNearby();
+            if(!gs.nearbyObject){msg('❌ Ничего рядом');return;}
+            const o=gs.nearbyObject;
+            if(o.type=='resource') {
+                const r=o.data;
+                if(r.type=='tree'){gs.woodCount++;msg('🌲 +1 дерево');}
+                else if(r.type=='rock'){gs.stoneCount++;msg('🪨 +1 камень');}
+                else if(r.type=='crystal'){gs.crystals++;msg('✨ +1 кристалл');}
+                else if(r.type=='shield'){gs.blueUnits[0].hasShield=true;gs.blueUnits[0].shieldReady=true;msg('🛡️ Щит!');}
+                else if(r.type=='speed') msg('⚡ Скорость!');
+                gs.resources=gs.resources.filter(x=>!(x.x==r.x&&x.y==r.y));
+            } else if(o.type=='wall') {
+                if(o.wt=='wood_wall') gs.woodCount++;
+                else gs.stoneCount++;
+                gs.wallAttacks.delete(wallKey(o.x,o.y));
+                gs.walls.delete(wallKey(o.x,o.y));
+                msg('🧱 Демонтировано');
+            } else if(o.type=='tower') {
+                const t=gs.towers[o.idx];
+                if(t.type=='wood') gs.woodCount+=2; else gs.stoneCount+=2;
+                gs.towers.splice(o.idx,1); msg('🗼 Демонтировано');
+            } else if(o.type=='trap'){gs.crystals++;gs.traps.splice(o.idx,1);msg('⚡ +1💎');}
+            else if(o.type=='totem'){gs.crystals+=2;gs.totems.splice(o.idx,1);msg('✨ +2💎');}
+            else if(o.type=='teleport'){gs.crystals+=3;gs.teleports.splice(o.idx,1);msg('🌀 +3💎');}
+            gs.nearbyObject=null;
+        }
+        
+        function shield() {
+            if(!gs.blueUnits.length||gs.gamePhase!='day'){msg('❌ Только днём!');return;}
+            const b=gs.blueUnits[0];
+            if(b.hasShield&&b.shieldReady){b.shieldReady=false;msg('🛡️ Щит активен!');setTimeout(()=>{b.hasShield=false;msg('Щит кончился');},CONFIG.SHIELD_DURATION*1000);}
+            else msg('❌ Нет щита');
+        }
+        
+        function build(x,y,type) {
+            if(!posFree(x,y)){msg('❌ Занято!');return false;}
+            const costs={wood_wall:{r:'wood',a:CONFIG.WOOD_WALL_COST},stone_wall:{r:'stone',a:CONFIG.STONE_WALL_COST},wood_tower:{r:'wood',a:CONFIG.WOOD_TOWER_COST},stone_tower:{r:'stone',a:CONFIG.STONE_TOWER_COST},totem_light:{r:'crystal',a:CONFIG.TOTEM_LIGHT_COST},time_trap:{r:'crystal',a:CONFIG.TIME_TRAP_COST},fire_trap:{r:'crystal',a:CONFIG.FIRE_TRAP_COST},teleport:{r:'crystal',a:CONFIG.TELEPORT_COST}};
+            const c=costs[type]; if(!c) return false;
+            let ok=false;
+            if(c.r=='wood') ok=gs.woodCount>=c.a;
+            else if(c.r=='stone') ok=gs.stoneCount>=c.a;
+            else ok=gs.crystals>=c.a;
+            if(!ok){msg('❌ Не хватает!');return false;}
+            if(c.r=='wood')gs.woodCount-=c.a;else if(c.r=='stone')gs.stoneCount-=c.a;else gs.crystals-=c.a;
+            if(type=='wood_wall'){gs.walls.set(wallKey(x,y),{hp:CONFIG.WOOD_WALL_BREAK_TIME,maxHp:CONFIG.WOOD_WALL_BREAK_TIME,type:'wood_wall'});msg('🪵 Стена!');}
+            else if(type=='stone_wall'){gs.walls.set(wallKey(x,y),{hp:CONFIG.STONE_WALL_BREAK_TIME,maxHp:CONFIG.STONE_WALL_BREAK_TIME,type:'stone_wall'});msg('🪨 Стена!');}
+            else if(type=='wood_tower'){gs.towers.push({x,y,type:'wood',dmg:0.5,range:4,ls:Date.now()/1000});msg('🗼 Башня!');}
+            else if(type=='stone_tower'){gs.towers.push({x,y,type:'stone',dmg:1,range:5,ls:Date.now()/1000});msg('🏰 Башня!');}
+            else if(type=='totem_light'){gs.totems.push({x,y,type:'light',radius:4});msg('🕯️ Тотем!');}
+            else if(type=='time_trap'){gs.traps.push({x,y,type:'time'});msg('⏳ Ловушка!');}
+            else if(type=='fire_trap'){gs.traps.push({x,y,type:'fire'});msg('🔥 Ловушка!');}
+            else if(type=='teleport'){gs.teleports.push({x,y});msg('🌀 Телепорт!');}
+            return true;
+        }
+        
+        // ==================== PHASES ====================
+        function chkNightEnd() {
+            if(gs.gamePhase=='night'&&!gs.redUnits.length){msg('🌞 Рассвет!',2);gs.timeLeft=0;}
+        }
+        
+        function chgPhase() {
+            if(gs.gamePhase=='day'){
+                gs.gamePhase='night'; gs.timeLeft=CONFIG.NIGHT_DURATION;
+                gs.bullets=[]; gs.redMoves.clear(); gs.blueIsMoving=false;
+                if(gs.blueUnits.length){gs.blueUnits[0].x=Math.round(gs.blueUnits[0].x);gs.blueUnits[0].y=Math.round(gs.blueUnits[0].y);}
+                spawnReds(); msg(`🌙 Ночь ${gs.currentNight}!`,3);
+            } else {
+                gs.gamePhase='day'; gs.currentNight++; gs.timeLeft=CONFIG.DAY_DURATION;
+                gs.score=gs.currentNight-1;
+                if(gs.score>gs.bestScore){gs.bestScore=gs.score;localStorage.setItem('cs_best',gs.bestScore);}
+                gs.redUnits=[]; gs.bullets=[]; gs.redMoves.clear();
+                if(gs.blueUnits.length){gs.blueUnits[0].x=Math.round(gs.blueUnits[0].x);gs.blueUnits[0].y=Math.round(gs.blueUnits[0].y);}
+                genWorld(); msg(`🌞 День ${gs.currentNight}!`,3);
+            }
+        }
+        
+        function startGame() {
+            gs.gamePhase='day'; gs.currentNight=1; gs.timeLeft=CONFIG.DAY_DURATION;
+            gs.woodCount=CONFIG.START_WOOD; gs.stoneCount=CONFIG.START_STONE;
+            gs.crystals=CONFIG.START_CRYSTALS; gs.selectedBuilding=null;
+            gs.blueIsMoving=false; gs.redMoves.clear(); gs.score=0;
+            genInitial(); checkNearby(); msg('🎮 Погнали! [E]-сбор [F]-щит',3);
+        }
+        
+        // ==================== RENDER ====================
+        function spr(key,x,y,w,h) {
+            if(sprites[key]) ctx.drawImage(sprites[key],x,y,w,h);
+        }
+        
+        function draw() {
+            ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            const C=CONFIG.CELL;
+            
+            // Grid
+            for(let y=0;y<CONFIG.SIZE_Y;y++) for(let x=0;x<CONFIG.SIZE_X;x++) {
+                ctx.fillStyle=(x+y)%2==0?'#2d5a2c':'#1e4a1e';
+                ctx.fillRect(x*C,y*C,C,C);
+            }
+            
+            // Resources
+            for(const r of gs.resources) {
+                if(r.type=='tree'){if(!spr('tree',r.x*C,r.y*C,C,C)){ctx.fillStyle='#228B22';ctx.beginPath();ctx.arc(r.x*C+C/2,r.y*C+C/2,C*.35,0,Math.PI*2);ctx.fill();}}
+                else if(r.type=='rock'){if(!spr('rock',r.x*C,r.y*C,C,C)){ctx.fillStyle='#808080';ctx.fillRect(r.x*C+C*.2,r.y*C+C*.2,C*.6,C*.6);}}
+                else if(r.type=='crystal'){if(!spr('crystal',r.x*C,r.y*C,C,C)){ctx.fillStyle='#FF69B4';ctx.beginPath();ctx.arc(r.x*C+C/2,r.y*C+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
+                else if(r.type=='shield'){if(!spr('shield',r.x*C,r.y*C,C,C)){ctx.fillStyle='#FFD700';ctx.beginPath();ctx.arc(r.x*C+C/2,r.y*C+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
+            }
+            
+            // Walls
+            for(const [k,w] of gs.walls) {
+                const [x,y]=k.split(',').map(Number);
+                if(w.hp==999){ctx.fillStyle='#4a3728';ctx.fillRect(x*C,y*C,C,C);}
+                else {
+                    const sk=w.type=='wood_wall'?'wall_wood':'wall_stone';
+                    if(!spr(sk,x*C,y*C,C,C)){ctx.fillStyle=w.type=='wood_wall'?'#8B4513':'#808080';ctx.fillRect(x*C+2,y*C+2,C-4,C-4);}
+                    const p=gs.wallAttacks.get(k)||0;
+                    const bw=Math.max(0,(w.maxHp-p)/w.maxHp)*(C-10);
+                    ctx.fillStyle='#333';ctx.fillRect(x*C+5,y*C+C-8,C-10,5);
+                    ctx.fillStyle='#0F0';ctx.fillRect(x*C+5,y*C+C-8,bw,5);
+                }
+            }
+            
+            // Towers
+            for(const t of gs.towers) {
+                const sk=t.type=='wood'?'tower_wood':'tower_stone';
+                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.type=='wood'?'#CD853F':'#A0A0A0';ctx.fillRect(t.x*C+C*.2,t.y*C+C*.2,C*.6,C*.6);}
+                ctx.strokeStyle='rgba(255,215,0,.2)';ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,t.range*C,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+            }
+            
+            // Totems, Traps, Teleports
+            for(const t of gs.totems) {if(!spr('totem_light',t.x*C,t.y*C,C,C)){ctx.fillStyle='#08F';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
+            for(const t of gs.traps) {
+                const sk=t.type=='time'?'trap_time':'trap_fire';
+                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.type=='time'?'#FA0':'#F44';ctx.fillRect(t.x*C+C*.25,t.y*C+C*.25,C*.5,C*.5);}
+            }
+            for(const t of gs.teleports) {if(!spr('teleport',t.x*C,t.y*C,C,C)){ctx.fillStyle='#93C';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.35,0,Math.PI*2);ctx.fill();}}
+            
+            // Bullets
+            for(const b of gs.bullets) {
+                ctx.fillStyle='#FF0'; ctx.shadowBlur=8; ctx.shadowColor='#FFD700';
+                ctx.beginPath(); ctx.arc((b.cx||b.x)*C+C/2,(b.cy||b.y)*C+C/2,C*.12,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+            }
+            
+            // Blue unit
+            if(gs.blueUnits.length) {
+                const b=gs.blueUnits[0]; const bx=b.x*C, by=b.y*C;
+                let sk='blue_idle'; if(gs.gamePhase=='night') sk='blue_scared';
+                if(!spr(sk,bx,by,C,C)) {
+                    ctx.fillStyle=gs.gamePhase=='night'?'#69F':'#48F';
+                    ctx.beginPath(); ctx.arc(bx+C/2,by+C/2,C*.35,0,Math.PI*2); ctx.fill();
+                    ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(bx+C*.4,by+C*.42,C*.08,0,Math.PI*2); ctx.arc(bx+C*.6,by+C*.42,C*.08,0,Math.PI*2); ctx.fill();
+                }
+                if(b.hasShield&&!b.shieldReady){ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.beginPath();ctx.arc(bx+C/2,by+C/2,C*.45,0,Math.PI*2);ctx.stroke();}
+            }
+            
+            // Red units
+            for(const r of gs.redUnits) {
+                if(r.hp<=0) continue;
+                const rx=r.x*C, ry=r.y*C;
+                const sk=gs.gamePhase=='day'?'red_sleep':'red';
+                if(!spr(sk,rx,ry,C,C)) {
+                    ctx.fillStyle=gs.gamePhase=='day'?'#633':'#F33';
+                    ctx.beginPath(); ctx.arc(rx+C/2,ry+C/2,C*.35,0,Math.PI*2); ctx.fill();
+                }
+                ctx.fillStyle='#FAA'; ctx.font=`bold ${Math.max(10,C*.35)}px Arial`; ctx.textAlign='center';
+                ctx.fillText(`♥${r.hp}`,rx+C/2,ry-C*.3); ctx.textAlign='left';
+            }
+            
+            // Nearby
+            if(gs.nearbyObject&&gs.gamePhase=='day') {
+                let nx,ny;
+                if(gs.nearbyObject.type=='resource'){nx=gs.nearbyObject.data.x;ny=gs.nearbyObject.data.y;}
+                else if(gs.nearbyObject.type=='wall'){nx=gs.nearbyObject.x;ny=gs.nearbyObject.y;}
+                else if(gs.nearbyObject.type=='tower'){nx=gs.towers[gs.nearbyObject.idx].x;ny=gs.towers[gs.nearbyObject.idx].y;}
+                else if(gs.nearbyObject.type=='trap'){nx=gs.traps[gs.nearbyObject.idx].x;ny=gs.traps[gs.nearbyObject.idx].y;}
+                else if(gs.nearbyObject.type=='totem'){nx=gs.totems[gs.nearbyObject.idx].x;ny=gs.totems[gs.nearbyObject.idx].y;}
+                else if(gs.nearbyObject.type=='teleport'){nx=gs.teleports[gs.nearbyObject.idx].x;ny=gs.teleports[gs.nearbyObject.idx].y;}
+                if(nx!==undefined){ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.strokeRect(nx*C,ny*C,C,C);}
+            }
+            
+            // Shop
+            if(gs.gamePhase=='day'&&gs.gamePhase!='game_over') {
+                const sx=canvas.width-170;
+                ctx.fillStyle='rgba(13,13,26,.95)';ctx.fillRect(sx-5,10,165,canvas.height-80);
+                ctx.strokeStyle='#FFD700';ctx.lineWidth=2;ctx.strokeRect(sx-5,10,165,canvas.height-80);
+                ctx.fillStyle='#FFD700';ctx.font='bold 11px Arial';ctx.textAlign='center';
+                ctx.fillText('🏪 МАГАЗИН',sx+80,25); ctx.textAlign='left';
+                const items=[['Дер.стена','wood_wall',CONFIG.WOOD_WALL_COST,'wood'],['Кам.стена','stone_wall',CONFIG.STONE_WALL_COST,'stone'],['Дер.башня','wood_tower',CONFIG.WOOD_TOWER_COST,'wood'],['Кам.башня','stone_tower',CONFIG.STONE_TOWER_COST,'stone'],['Тотем','totem_light',CONFIG.TOTEM_LIGHT_COST,'crystal'],['Лов.врем','time_trap',CONFIG.TIME_TRAP_COST,'crystal'],['Огн.лов','fire_trap',CONFIG.FIRE_TRAP_COST,'crystal'],['Телепорт','teleport',CONFIG.TELEPORT_COST,'crystal']];
+                items.forEach(([n,t,c,r],i)=>{
+                    const y=42+i*28;
+                    if(gs.selectedBuilding==t){ctx.fillStyle='rgba(255,215,0,.25)';ctx.fillRect(sx,y-10,155,24);}
+                    ctx.fillStyle='white';ctx.font='9px Arial';ctx.fillText(n,sx+5,y+2);
+                    ctx.fillText((r=='crystal'?'💎':r=='wood'?'🪵':'🪨')+c,sx+110,y+2);
+                });
+            }
+            
+            // Message
+            if(gs.message&&Date.now()<gs.messageTime) {
+                const my=canvas.height-75;
+                ctx.fillStyle='rgba(26,26,46,.9)';ctx.fillRect(canvas.width/2-150,my-10,300,25);
+                ctx.strokeStyle='#FFD700';ctx.strokeRect(canvas.width/2-150,my-10,300,25);
+                ctx.fillStyle='#FFD700';ctx.font='bold 12px Arial';ctx.textAlign='center';
+                ctx.fillText(gs.message,canvas.width/2,my+7);ctx.textAlign='left';
+            }
+            
+            // Game over
+            if(gs.gamePhase=='game_over') {
+                ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillStyle='red';ctx.font='bold 32px Arial';ctx.textAlign='center';
+                ctx.fillText('💀 ПОРАЖЕНИЕ 💀',canvas.width/2,canvas.height/2-20);
+                ctx.fillStyle='white';ctx.font='16px Arial';
+                ctx.fillText(`Ночей: ${gs.score}`,canvas.width/2,canvas.height/2+20);
+                ctx.fillText('R/тап - рестарт',canvas.width/2,canvas.height/2+50);
+                ctx.textAlign='left';
+            }
+            
+            // UI bar
+            const uy=C*CONFIG.SIZE_Y;
+            ctx.fillStyle='#1a1a2e';ctx.fillRect(0,uy,canvas.width,70);
+            ctx.strokeStyle='#FFD700';ctx.lineWidth=2;ctx.strokeRect(0,uy,canvas.width,70);
+            spr(gs.gamePhase=='day'?'day':'night',10,uy+5,40,40);
+            ctx.fillStyle=gs.gamePhase=='day'?'#FFD700':'#8B6CFF';ctx.font='bold 14px Arial';
+            ctx.fillText(`${gs.gamePhase=='day'?'☀️':'🌙'} ${gs.gamePhase=='day'?'ДЕНЬ':'НОЧЬ'} ${gs.currentNight}`,55,uy+25);
+            ctx.fillStyle='#F44';ctx.fillText(`👹${gs.redUnits.length}`,200,uy+25);
+            ctx.fillStyle='#8B6914';ctx.fillText(`🪵${gs.woodCount}`,280,uy+25);
+            ctx.fillStyle='#A0A0A0';ctx.fillText(`🪨${gs.stoneCount}`,360,uy+25);
+            spr('ui_crystal',440,uy+8,24,24); ctx.fillStyle='#FFD700';ctx.fillText(`${gs.crystals}`,468,uy+25);
+            const m=Math.floor(gs.timeLeft/60),s=Math.floor(gs.timeLeft%60);
+            ctx.fillStyle='#FFE66D';ctx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,canvas.width-120,uy+25);
+            const mt=gs.gamePhase=='day'?CONFIG.DAY_DURATION:CONFIG.NIGHT_DURATION;
+            const bw=(gs.timeLeft/mt)*(canvas.width-200);
+            ctx.fillStyle='#333';ctx.fillRect(60,uy+35,canvas.width-120,8);
+            ctx.fillStyle=gs.gamePhase=='day'?'#FFD700':'#8B3A3A';ctx.fillRect(60,uy+35,bw,8);
+            ctx.fillStyle='#FFD700';ctx.font='11px Arial';ctx.fillText(`🏆${gs.bestScore}`,canvas.width-180,uy+18);
+        }
+        
+        function drawMenu() {
+            ctx.fillStyle='#0a0a1a';ctx.fillRect(0,0,canvas.width,canvas.height);
+            const cx=canvas.width/2;
+            ctx.fillStyle='#FFD700';ctx.font=`bold ${Math.min(36,canvas.width/16)}px Arial`;
+            ctx.textAlign='center';ctx.fillText('🏰 CRYSTAL SURVIVORS 🏰',cx,100);
+            ctx.fillStyle='white';ctx.font=`${Math.min(16,canvas.width/35)}px Arial`;
+            ctx.fillText('Строй защиту, переживи ночи!',cx,150);
+            ctx.fillStyle='#2a2a3a';ctx.fillRect(cx-120,200,240,50);
+            ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.strokeRect(cx-120,200,240,50);
+            ctx.fillStyle='white';ctx.font='bold 20px Arial';ctx.fillText('▶ НАЧАТЬ ИГРУ',cx,232);
+            ctx.fillStyle='#AAA';ctx.font='13px Arial';
+            ctx.fillText('WASD/Стрелки [E]сбор [F]щит',cx,290);
+            ctx.fillText('Тап/Клик для взаимодействия',cx,315);
+            if(gs.bestScore>0){ctx.fillStyle='#FFD700';ctx.fillText(`🏆 Рекорд: ${gs.bestScore} ночей`,cx,355);}
+            ctx.textAlign='left';
+        }
+        
+        // ==================== INPUT ====================
+        document.addEventListener('keydown',e=>{
+            const k=e.key.toLowerCase();
+            if(gs.gamePhase=='game_over'){if(k=='r')startGame();return;}
+            if(gs.gamePhase=='menu'){if(k=='enter'||k==' '){startGame();return;}return;}
+            if(gs.gamePhase!='day'&&gs.gamePhase!='night') return;
+            if(k=='e'){e.preventDefault();collect();return;}
+            if(k=='f'){e.preventDefault();shield();return;}
+            let dx=0,dy=0;
+            if(k=='w'||k=='arrowup') dy=-1;
+            else if(k=='s'||k=='arrowdown') dy=1;
+            else if(k=='a'||k=='arrowleft') dx=-1;
+            else if(k=='d'||k=='arrowright') dx=1;
+            else return;
+            e.preventDefault(); moveBlue(dx,dy);
+        });
+        
+        canvas.addEventListener('click',e=>{
+            if(gs.gamePhase=='game_over'||gs.gamePhase=='menu'){startGame();return;}
+            if(gs.gamePhase!='day') return;
+            const r=canvas.getBoundingClientRect();
+            const x=e.clientX-r.left, y=e.clientY-r.top;
+            const sx=canvas.width-170;
+            if(x>=sx&&y<canvas.height-70) {
+                const items=['wood_wall','stone_wall','wood_tower','stone_tower','totem_light','time_trap','fire_trap','teleport'];
+                const idx=Math.floor((y-42)/28);
+                if(idx>=0&&idx<items.length){gs.selectedBuilding=items[idx];return;}
+            }
+            const cx=Math.floor(x/CONFIG.CELL), cy=Math.floor(y/CONFIG.CELL);
+            if(cx>=0&&cx<CONFIG.SIZE_X&&cy>=0&&cy<CONFIG.SIZE_Y&&gs.selectedBuilding) {
+                if(build(cx,cy,gs.selectedBuilding)) gs.selectedBuilding=null;
             }
         });
         
-        document.getElementById('buildHutBtn').addEventListener('click', () => {
-            if (gameState.resources.wood >= 30) {
-                gameState.resources.wood -= 30;
-                // Увеличиваем максимальное население или даем другую пользу
-                alert('Хижина построена! Теперь ваше племя может увеличиться.');
+        // ==================== LOOP ====================
+        function update() {
+            if(gs.gamePhase=='day'||gs.gamePhase=='night') {
+                gs.timeLeft-=1/60; if(gs.timeLeft<=0) chgPhase();
+                updBlue(); updReds(); updWalls(); towersAtk(); updBullets();
+                actTraps(); moveReds(); chkNightEnd(); checkNearby();
             }
-        });
+        }
         
-        document.getElementById('gatherFoodBtn').addEventListener('click', () => {
-            gameState.villagers.forEach(villager => {
-                villager.task = 'gatherFood';
-                villager.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-            });
-        });
+        function render() {
+            if(gs.gamePhase=='menu') drawMenu();
+            else draw();
+        }
         
-        document.getElementById('gatherWoodBtn').addEventListener('click', () => {
-            gameState.villagers.forEach(villager => {
-                villager.task = 'gatherWood';
-                villager.target = { x: Math.random() * canvas.width, y: Math.random() * canvas.height };
-            });
-        });
+        function loop() { update(); render(); requestAnimationFrame(loop); }
         
-        // Запускаем игру при загрузке
-        window.onload = initGame;
+        // ==================== START ====================
+        async function init() {
+            await initSDK();
+            await loadAllSprites();
+            document.getElementById('loading').style.display='none';
+            loop();
+        }
+        
+        resizeCanvas();
+        init();
     </script>
 </body>
 </html>
