@@ -48,18 +48,20 @@
             SX:25,SY:18,CL:32,DAY:60,NIGHT:30,
             SW:5,SS:3,SCR:3,WWC:3,SWC:5,WTC:8,STC:12,
             TLC:8,TTC:5,TFC:7,TPC:10,TSC:20,RSC:12,
-            RSM:0.08,RBH:3,RHI:1,RSB:3,RSIE:2,
-            WWBT:5,SWBT:15,SD:5,TCD:1.0,MD:0.15
+            RSM:0.03,RBH:3,RHI:1,RSB:3,RSIE:2,
+            WWBT:5,SWBT:15,SD:5,TCD:1.0,MD:0.15,
+            SHOP_WIDTH: 200
         };
         
         // ==================== CANVAS ====================
         const cv=document.getElementById('gameCanvas'),cx=cv.getContext('2d');
         function rs(){
-            const mw=Math.min(innerWidth-20,1000),mh=Math.min(innerHeight-20,700);
+            const mw=Math.min(innerWidth-20,1200),mh=Math.min(innerHeight-20,800);
             const r=C.SX/C.SY;let w,h;
             mw/mh>r?(h=mh,w=h*r):(w=mw,h=w/r);
             C.CL=Math.max(Math.floor(w/C.SX),20);
-            cv.width=C.CL*C.SX;cv.height=C.CL*C.SY+70;
+            cv.width=C.CL*C.SX+C.SHOP_WIDTH;
+            cv.height=C.CL*C.SY+70;
         }
         addEventListener('resize',rs);rs();
         
@@ -69,7 +71,7 @@
             wd:C.SW,sn:C.SS,cr:C.SCR,ph:'menu',nt:1,tm:C.DAY,
             bld:null,nr:null,msg:'',msgT:0,wAt:new Map(),rMv:new Map(),
             bMv:!1,bSX:0,bSY:0,bTX:0,bTY:0,bST:0,sc:0,bs:+localStorage.getItem('cs_best')||0,
-            lastTimerUpdate:Date.now()
+            lastTimerUpdate:Date.now(),shopHover:null
         };
         
         // ==================== HELPERS ====================
@@ -82,13 +84,13 @@
         // ==================== TIMER ====================
         function updateTimer() {
             const now = Date.now();
-            const delta = (now - G.lastTimerUpdate) / 1000; // в секундах
+            const delta = (now - G.lastTimerUpdate) / 1000;
             G.lastTimerUpdate = now;
             
             if (G.ph === 'day' || G.ph === 'night') {
                 G.tm -= delta;
                 if (G.tm <= 0) {
-                    G.tm = 0; // предотвращаем отрицательные значения
+                    G.tm = 0;
                     chPh();
                 }
             }
@@ -262,7 +264,7 @@
                 if(G.sc>G.bs){G.bs=G.sc;localStorage.setItem('cs_best',G.bs)}
                 G.rd=[];G.blt=[];G.rMv.clear();if(G.bl.length){G.bl[0].x=Math.round(G.bl[0].x);G.bl[0].y=Math.round(G.bl[0].y)}
                 gW();document.getElementById('skipNight').style.display='block';ms(`🌞 День ${G.nt}!`,3)}
-            G.lastTimerUpdate = Date.now(); // Сброс таймера при смене фазы
+            G.lastTimerUpdate = Date.now();
         }
         
         function stG(){
@@ -276,10 +278,126 @@
         // ==================== RENDER ====================
         const sp=(k,x,y,w,h)=>{if(sprites[k]){cx.drawImage(sprites[k],x,y,w,h);return!0}return!1};
         
+        function drawShop() {
+            const shopX = C.SX * C.CL;
+            const shopW = C.SHOP_WIDTH;
+            
+            // Фон магазина с градиентом
+            const gradient = cx.createLinearGradient(shopX, 0, shopX + shopW, 0);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#2a2a4e');
+            cx.fillStyle = gradient;
+            cx.fillRect(shopX, 0, shopW, cv.height);
+            
+            // Рамка
+            cx.strokeStyle = '#FFD700';
+            cx.lineWidth = 2;
+            cx.strokeRect(shopX + 2, 2, shopW - 4, cv.height - 4);
+            
+            // Заголовок
+            cx.fillStyle = '#FFD700';
+            cx.font = 'bold 16px Arial';
+            cx.textAlign = 'center';
+            cx.fillText('🏪 МАГАЗИН 🏪', shopX + shopW/2, 30);
+            
+            // Разделитель
+            cx.strokeStyle = '#FFD700';
+            cx.lineWidth = 1;
+            cx.beginPath();
+            cx.moveTo(shopX + 10, 40);
+            cx.lineTo(shopX + shopW - 10, 40);
+            cx.stroke();
+            
+            const items = [
+                {name: '🪵 Дер. стена', type: 'wood_wall', cost: C.WWC, res: 'wd', desc: 'Прочность: 5с', color: '#8B4513'},
+                {name: '🪨 Кам. стена', type: 'stone_wall', cost: C.SWC, res: 'sn', desc: 'Прочность: 15с', color: '#808080'},
+                {name: '🗼 Дер. башня', type: 'wood_tower', cost: C.WTC, res: 'wd', desc: 'Урон: 0.5, Радиус: 4', color: '#CD853F'},
+                {name: '🏰 Кам. башня', type: 'stone_tower', cost: C.STC, res: 'sn', desc: 'Урон: 1, Радиус: 5', color: '#A0A0A0'},
+                {name: '🕯️ Тотем', type: 'totem_light', cost: C.TLC, res: 'cr', desc: 'Замедляет врагов', color: '#0088FF'},
+                {name: '⏳ Лов. времени', type: 'time_trap', cost: C.TTC, res: 'cr', desc: 'Заморозка', color: '#FFAA00'},
+                {name: '🔥 Огн. ловушка', type: 'fire_trap', cost: C.TFC, res: 'cr', desc: 'Урон: 2 + кристалл', color: '#FF4444'},
+                {name: '🌀 Телепорт', type: 'teleport', cost: C.TPC, res: 'cr', desc: 'Телепортация', color: '#9932CC'}
+            ];
+            
+            const startY = 50;
+            const itemH = 65;
+            
+            items.forEach((item, i) => {
+                const y = startY + i * itemH;
+                const isSelected = G.bld === item.type;
+                const isHovered = G.shopHover === i;
+                
+                // Карточка предмета
+                const cardX = shopX + 10;
+                const cardW = shopW - 20;
+                const cardH = itemH - 5;
+                
+                // Фон карточки
+                if (isSelected) {
+                    cx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+                } else if (isHovered) {
+                    cx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                } else {
+                    cx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                }
+                cx.fillRect(cardX, y, cardW, cardH);
+                
+                // Рамка карточки
+                cx.strokeStyle = isSelected ? '#FFD700' : item.color;
+                cx.lineWidth = isSelected ? 2 : 1;
+                cx.strokeRect(cardX, y, cardW, cardH);
+                
+                // Название
+                cx.fillStyle = '#FFFFFF';
+                cx.font = 'bold 11px Arial';
+                cx.textAlign = 'left';
+                cx.fillText(item.name, cardX + 8, y + 18);
+                
+                // Описание
+                cx.fillStyle = '#AAAAAA';
+                cx.font = '9px Arial';
+                cx.fillText(item.desc, cardX + 8, y + 32);
+                
+                // Стоимость
+                const costSymbol = item.res === 'cr' ? '💎' : item.res === 'wd' ? '🪵' : '🪨';
+                cx.fillStyle = item.res === 'cr' ? '#FFD700' : item.res === 'wd' ? '#8B6914' : '#A0A0A0';
+                cx.font = 'bold 12px Arial';
+                cx.textAlign = 'right';
+                cx.fillText(`${costSymbol} ${item.cost}`, cardX + cardW - 8, y + 45);
+                
+                // Индикатор наличия ресурсов
+                const hasResources = item.res === 'wd' ? G.wd >= item.cost : 
+                                    item.res === 'sn' ? G.sn >= item.cost : 
+                                    G.cr >= item.cost;
+                
+                if (!hasResources) {
+                    cx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                    cx.fillRect(cardX, y, cardW, cardH);
+                    cx.fillStyle = '#FF4444';
+                    cx.font = 'bold 10px Arial';
+                    cx.textAlign = 'center';
+                    cx.fillText('НЕДОСТАТОЧНО', cardX + cardW/2, y + cardH/2);
+                }
+            });
+            
+            // Подсказка внизу
+            cx.fillStyle = '#888';
+            cx.font = '9px Arial';
+            cx.textAlign = 'center';
+            cx.fillText('Клик - выбрать', shopX + shopW/2, startY + items.length * itemH + 15);
+            cx.fillText('Клик на поле - построить', shopX + shopW/2, startY + items.length * itemH + 30);
+            
+            cx.textAlign = 'left';
+        }
+        
         function drw(){
             const CL=C.CL;
             cx.fillStyle='#1a1a2e';cx.fillRect(0,0,cv.width,cv.height);
             if(G.ph=='menu'){drwM();return}
+            
+            // Игровое поле (только слева)
+            cx.fillStyle='#0a0a1a';
+            cx.fillRect(0,0,C.SX*CL,C.SY*CL);
             
             // Grid
             for(let y=0;y<C.SY;y++)for(let x=0;x<C.SX;x++){cx.fillStyle=(x+y)%2?'#1e4a1e':'#2d5a2c';cx.fillRect(x*CL,y*CL,CL,CL)}
@@ -333,19 +451,13 @@
                 cx.strokeStyle='#FFD700';cx.lineWidth=3;cx.strokeRect(x*CL,y*CL,CL,CL);
                 cx.fillStyle='#FFD700';cx.font='bold 12px Arial';cx.textAlign='center';cx.fillText('[E]',x*CL+CL/2,y*CL-8);cx.textAlign='left'}
             
-            // Shop
-            if(G.ph=='day'){const sx=cv.width-170;
-                cx.fillStyle='rgba(13,13,26,.95)';cx.fillRect(sx-5,10,165,cv.height-80);
-                cx.strokeStyle='#FFD700';cx.strokeRect(sx-5,10,165,cv.height-80);
-                cx.fillStyle='#FFD700';cx.font='bold 11px Arial';cx.textAlign='center';cx.fillText('🏪 МАГАЗИН',sx+80,25);cx.textAlign='left';
-                const its=[['Дер.стена','wood_wall',C.WWC,'wd'],['Кам.стена','stone_wall',C.SWC,'sn'],['Дер.башня','wood_tower',C.WTC,'wd'],['Кам.башня','stone_tower',C.STC,'sn'],['Тотем','totem_light',C.TLC,'cr'],['Лов.врем','time_trap',C.TTC,'cr'],['Огн.лов','fire_trap',C.TFC,'cr'],['Телепорт','teleport',C.TPC,'cr']];
-                its.forEach(([n,t,c,r],i)=>{const y=42+i*28;if(G.bld==t){cx.fillStyle='rgba(255,215,0,.25)';cx.fillRect(sx,y-10,155,24)}
-                    cx.fillStyle='white';cx.font='9px Arial';cx.fillText(n,sx+5,y+2);cx.fillText((r=='cr'?'💎':r=='wd'?'🪵':'🪨')+c,sx+110,y+2)})}
+            // Shop (справа от поля)
+            if(G.ph=='day') drawShop();
             
             // Game Over
-            if(G.ph=='game_over'){cx.fillStyle='rgba(0,0,0,.75)';cx.fillRect(0,0,cv.width,cv.height);
-                cx.fillStyle='red';cx.font='bold 32px Arial';cx.textAlign='center';cx.fillText('💀 ПОРАЖЕНИЕ 💀',cv.width/2,cv.height/2-20);
-                cx.fillStyle='white';cx.font='16px Arial';cx.fillText(`Ночей: ${G.sc}`,cv.width/2,cv.height/2+20);cx.fillText('R/тап - рестарт',cv.width/2,cv.height/2+50);cx.textAlign='left'}
+            if(G.ph=='game_over'){cx.fillStyle='rgba(0,0,0,.75)';cx.fillRect(0,0,C.SX*CL,cv.height);
+                cx.fillStyle='red';cx.font='bold 32px Arial';cx.textAlign='center';cx.fillText('💀 ПОРАЖЕНИЕ 💀',C.SX*CL/2,cv.height/2-20);
+                cx.fillStyle='white';cx.font='16px Arial';cx.fillText(`Ночей: ${G.sc}`,C.SX*CL/2,cv.height/2+20);cx.fillText('R/тап - рестарт',C.SX*CL/2,cv.height/2+50);cx.textAlign='left'}
             
             drwUI();
         }
@@ -362,8 +474,8 @@
             const m=Math.floor(G.tm/60),s=Math.floor(G.tm%60);
             cx.fillStyle='#FFE66D';cx.font='bold 14px Arial';
             cx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,cv.width-120,uy+25);
-            const mt=G.ph=='day'?C.DAY:C.NIGHT,bw=(G.tm/mt)*(cv.width-200);
-            cx.fillStyle='#333';cx.fillRect(60,uy+35,cv.width-200,8);
+            const mt=G.ph=='day'?C.DAY:C.NIGHT,bw=(G.tm/mt)*(cv.width-C.SHOP_WIDTH-80);
+            cx.fillStyle='#333';cx.fillRect(60,uy+35,cv.width-C.SHOP_WIDTH-80,8);
             cx.fillStyle=G.ph=='day'?'#FFD700':'#8B3A3A';cx.fillRect(60,uy+35,bw,8);
             cx.fillStyle='#FFD700';cx.font='11px Arial';cx.fillText(`🏆${G.bs}`,cv.width-140,uy+55);
             
@@ -382,7 +494,7 @@
             cx.fillStyle='#2a2a3a';cx.fillRect(cx2-120,200,240,50);cx.strokeStyle='#FFD700';cx.strokeRect(cx2-120,200,240,50);
             cx.fillStyle='white';cx.font='bold 20px Arial';cx.fillText('▶ НАЧАТЬ ИГРУ',cx2,232);
             cx.fillStyle='#AAA';cx.font='13px Arial';cx.fillText('WASD/Стрелки [E]сбор [F]щит [N]пропуск',cx2,290);
-            cx.fillText('Клик по магазину - строительство',cx2,315);
+            cx.fillText('Магазин справа от поля',cx2,315);
             if(G.bs>0){cx.fillStyle='#FFD700';cx.fillText(`🏆 Рекорд: ${G.bs} ночей`,cx2,355)}
             cx.textAlign='left';
         }
@@ -407,19 +519,52 @@
         
         document.getElementById('skipNight').addEventListener('click',skipToNight);
         
+        cv.addEventListener('mousemove', (e) => {
+            if(G.ph !== 'day') return;
+            const r = cv.getBoundingClientRect();
+            const x = e.clientX - r.left;
+            const y = e.clientY - r.top;
+            const shopX = C.SX * C.CL;
+            
+            if (x >= shopX && y < cv.height - 70) {
+                const itemIndex = Math.floor((y - 50) / 65);
+                G.shopHover = (itemIndex >= 0 && itemIndex < 8) ? itemIndex : null;
+            } else {
+                G.shopHover = null;
+            }
+        });
+        
         cv.addEventListener('click',e=>{
             if(G.ph=='game_over'||G.ph=='menu'){stG();return}
             if(G.ph!='day')return;
             const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
-            const sx=cv.width-170;
-            if(x>=sx&&y<cv.height-70){const its=['wood_wall','stone_wall','wood_tower','stone_tower','totem_light','time_trap','fire_trap','teleport'],idx=((y-42)/28)|0;if(idx>=0&&idx<its.length){G.bld=its[idx];return}}
-            const clX=x/C.CL|0,clY=y/C.CL|0;
-            if(clX>=0&&clX<C.SX&&clY>=0&&clY<C.SY&&G.bld){if(bld(clX,clY,G.bld))G.bld=null}
+            const shopX = C.SX * C.CL;
+            
+            // Клик по магазину
+            if(x >= shopX && y < cv.height - 70) {
+                const itemIndex = Math.floor((y - 50) / 65);
+                const items = ['wood_wall','stone_wall','wood_tower','stone_tower','totem_light','time_trap','fire_trap','teleport'];
+                if(itemIndex >= 0 && itemIndex < items.length) {
+                    G.bld = items[itemIndex];
+                    return;
+                }
+            }
+            
+            // Клик по игровому полю
+            const clX = Math.floor(x / C.CL);
+            const clY = Math.floor(y / C.CL);
+            if(clX >= 0 && clX < C.SX && clY >= 0 && clY < C.SY && G.bld) {
+                if(bld(clX, clY, G.bld)) G.bld = null;
+            }
+        });
+        
+        cv.addEventListener('mouseleave', () => {
+            G.shopHover = null;
         });
         
         // ==================== LOOP ====================
         function upd(){
-            updateTimer(); // Обновляем таймер на основе реального времени
+            updateTimer();
             if(G.ph=='day'||G.ph=='night'){uB();uR();uW();tA();uBl();aT();mvR();cNE();cN()}
         }
         
