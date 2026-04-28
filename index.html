@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>🏰 Crystal Survivors</title>
     
+    <script src="/sdk.js"></script>
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -15,468 +17,613 @@
             height: 100vh;
             overflow: hidden;
             font-family: 'Arial', sans-serif;
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        canvas { 
-            border: 2px solid #FFD700; 
-            display: block;
-            background: #1a1a2e;
+        canvas { border: 2px solid #FFD700; display: block; }
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #FFD700; font-size: 20px; text-align: center; z-index: 10;
+            background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;
         }
     </style>
 </head>
 <body>
+    <div id="loading">Загрузка...</div>
     <canvas id="gameCanvas"></canvas>
     
     <script>
-        console.log('🚀 Игра запускается...');
+        // ==================== YANDEX SDK ====================
+        let ysdk = null;
         
-        // ==================== НАСТРОЙКИ ====================
-        const CONFIG = {
+        async function initSDK() {
+            try {
+                if (typeof YaGames !== 'undefined') {
+                    ysdk = await YaGames.init();
+                    console.log('✅ SDK ready');
+                }
+            } catch(e) { console.log('SDK not available'); }
+        }
+        
+        // ==================== SPRITES ====================
+        const sprites = {};
+        const spriteFiles = {
+            'blue_idle': 'blue_idle.png',
+            'blue_scared': 'blue_scared.png',
+            'red': 'red.png',
+            'red_sleep': 'red_sleep.png',
+            'crystal': 'crystal.png',
+            'shield': 'shield.png',
+            'tree': 'tree.png',
+            'rock': 'stone.png',
+            'wall_wood': 'wall_wood.png',
+            'wall_stone': 'wall_stone.png',
+            'totem_light': 'totem_light.png',
+            'tower_wood': 'tower_wood.png',
+            'tower_stone': 'tower_stone.png',
+            'teleport': 'teleport.png',
+            'trap_time': 'trap_time.png',
+            'trap_fire': 'trap_fire.png',
+            'ui_crystal': 'ui_crystal.png',
+            'day': 'day.png',
+            'night': 'night.png'
+        };
+        
+        async function loadSprites() {
+            const promises = Object.entries(spriteFiles).map(([key, file]) => {
+                return new Promise(resolve => {
+                    const img = new Image();
+                    img.onload = () => { sprites[key] = img; resolve(); };
+                    img.onerror = () => { sprites[key] = null; resolve(); };
+                    img.src = file;
+                });
+            });
+            await Promise.all(promises);
+            console.log('📦 Sprites loaded:', Object.values(sprites).filter(s => s).length);
+        }
+        
+        // ==================== CONFIG ====================
+        const CFG = {
             SIZE_X: 25, SIZE_Y: 18, CELL: 32,
-            DAY_DURATION: 60, NIGHT_DURATION: 30,
+            DAY: 60, NIGHT: 30,
             START_WOOD: 5, START_STONE: 3, START_CRYSTALS: 2,
-            WOOD_WALL_COST: 3, STONE_WALL_COST: 5
+            WOOD_WALL: 3, STONE_WALL: 5,
+            WOOD_TOWER: 8, STONE_TOWER: 12,
+            TOTEM: 8, TRAP_TIME: 5, TRAP_FIRE: 7, TELEPORT: 10,
+            TREES: 20, ROCKS: 12,
+            RED_SPEED: 0.08, RED_BASE_HP: 3, RED_HP_INC: 1,
+            RED_BASE_SPAWN: 3, RED_SPAWN_INC: 2,
+            WALL_BREAK_WOOD: 5, WALL_BREAK_STONE: 15,
+            SHIELD_TIME: 5, TOWER_CD: 1.0, MOVE_TIME: 0.15
         };
         
         // ==================== CANVAS ====================
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        function resizeCanvas() {
-            const maxW = Math.min(window.innerWidth - 20, 1000);
-            const maxH = Math.min(window.innerHeight - 20, 700);
-            const ratio = CONFIG.SIZE_X / CONFIG.SIZE_Y;
-            
+        function resize() {
+            const mw = Math.min(innerWidth-20, 1000), mh = Math.min(innerHeight-20, 700);
+            const r = CFG.SIZE_X / CFG.SIZE_Y;
             let w, h;
-            if (maxW / maxH > ratio) {
-                h = maxH;
-                w = h * ratio;
-            } else {
-                w = maxW;
-                h = w / ratio;
-            }
-            
-            CONFIG.CELL = Math.floor(Math.max(w / CONFIG.SIZE_X, 20));
-            canvas.width = CONFIG.CELL * CONFIG.SIZE_X;
-            canvas.height = CONFIG.CELL * CONFIG.SIZE_Y + 70;
-            
-            console.log('📐 Canvas:', canvas.width, 'x', canvas.height);
+            if (mw/mh > r) { h = mh; w = h*r; }
+            else { w = mw; h = w/r; }
+            CFG.CELL = Math.max(Math.floor(w / CFG.SIZE_X), 20);
+            canvas.width = CFG.CELL * CFG.SIZE_X;
+            canvas.height = CFG.CELL * CFG.SIZE_Y + 70;
         }
+        addEventListener('resize', resize);
+        resize();
         
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        // ==================== GAME STATE ====================
+        const G = {
+            walls: new Map(), blue: [], red: [], res: [],
+            towers: [], traps: [], totems: [], teles: [], bullets: [],
+            wood: CFG.START_WOOD, stone: CFG.START_STONE, cry: CFG.START_CRYSTALS,
+            phase: 'menu', night: 1, time: CFG.DAY,
+            build: null, near: null, msg: '', msgT: 0,
+            wAtk: new Map(), rMov: new Map(),
+            bMov: false, bSX: 0, bSY: 0, bTX: 0, bTY: 0, bST: 0,
+            score: 0, best: +localStorage.getItem('cs_best')||0
+        };
         
-        // ==================== СОСТОЯНИЕ ИГРЫ ====================
-        let gameState = 'menu'; // menu, day, night, game_over
-        let currentNight = 1;
-        let timeLeft = CONFIG.DAY_DURATION;
-        let woodCount = 5;
-        let stoneCount = 3;
-        let crystals = 2;
-        let blueX = 12;
-        let blueY = 9;
-        let reds = [];
-        let walls = [];
-        let score = 0;
-        let bestScore = 0;
+        // ==================== HELPERS ====================
+        const free = (x,y) => {
+            const k = `${x},${y}`;
+            return !G.walls.has(k) && !G.towers.some(t=>t.x==x&&t.y==y) && 
+                   !G.traps.some(t=>t.x==x&&t.y==y) && !G.totems.some(t=>t.x==x&&t.y==y) && 
+                   !G.teles.some(t=>t.x==x&&t.y==y);
+        };
+        const msg = (t,d=2) => { G.msg=t; G.msgT=Date.now()+d*1000; };
+        const rhp = n => CFG.RED_BASE_HP + (n-1)*CFG.RED_HP_INC;
+        const rcnt = n => CFG.RED_BASE_SPAWN + Math.floor((n-1)/CFG.RED_SPAWN_INC);
+        const wk = (x,y) => `${x},${y}`;
         
-        // ==================== ГЕНЕРАЦИЯ ====================
-        function startDay() {
-            gameState = 'day';
-            timeLeft = CONFIG.DAY_DURATION;
-            reds = [];
-            walls = [];
-            
-            // Случайные стены для теста
-            for (let i = 0; i < 15; i++) {
-                const x = Math.floor(Math.random() * (CONFIG.SIZE_X - 2)) + 1;
-                const y = Math.floor(Math.random() * (CONFIG.SIZE_Y - 2)) + 1;
-                if (x !== blueX || y !== blueY) {
-                    walls.push({x, y, hp: 100});
+        // ==================== WORLD GEN ====================
+        function genRes() {
+            G.res = [];
+            for(let i=0;i<CFG.TREES;i++) for(let a=0;a<100;a++) {
+                const x=1+Math.random()*(CFG.SIZE_X-2)|0, y=1+Math.random()*(CFG.SIZE_Y-2)|0;
+                if(free(x,y)&&!G.res.some(r=>r.x==x&&r.y==y)){G.res.push({x,y,t:'tree'});break;}
+            }
+            for(let i=0;i<CFG.ROCKS;i++) for(let a=0;a<100;a++) {
+                const x=1+Math.random()*(CFG.SIZE_X-2)|0, y=1+Math.random()*(CFG.SIZE_Y-2)|0;
+                if(free(x,y)&&!G.res.some(r=>r.x==x&&r.y==y)){G.res.push({x,y,t:'rock'});break;}
+            }
+            for(let i=0;i<5;i++) for(let a=0;a<100;a++) {
+                const x=1+Math.random()*(CFG.SIZE_X-2)|0, y=1+Math.random()*(CFG.SIZE_Y-2)|0;
+                if(free(x,y)&&!G.res.some(r=>r.x==x&&r.y==y)){
+                    G.res.push({x,y,t:['crystal','shield','speed'][Math.random()*3|0]});break;
                 }
             }
-            
-            console.log('☀️ День', currentNight, '- Стен:', walls.length);
         }
         
-        function startNight() {
-            gameState = 'night';
-            timeLeft = CONFIG.NIGHT_DURATION;
-            
-            const count = 3 + Math.floor((currentNight - 1) / 2);
-            reds = [];
-            
-            for (let i = 0; i < count; i++) {
-                let x, y;
-                const side = Math.floor(Math.random() * 4);
-                if (side === 0) { x = Math.floor(Math.random() * 23) + 1; y = 1; }
-                else if (side === 1) { x = Math.floor(Math.random() * 23) + 1; y = 16; }
-                else if (side === 2) { x = 1; y = Math.floor(Math.random() * 16) + 1; }
-                else { x = 23; y = Math.floor(Math.random() * 16) + 1; }
-                
-                reds.push({x, y, hp: 3 + (currentNight - 1)});
+        function genInit() {
+            G.walls.clear(); G.blue=[]; G.red=[]; G.res=[];
+            G.towers=[]; G.traps=[]; G.totems=[]; G.teles=[]; G.bullets=[];
+            G.wAtk.clear(); G.rMov.clear();
+            for(let i=0;i<CFG.SIZE_X;i++) {
+                G.walls.set(wk(i,0),{hp:999,mhp:999,t:'border'});
+                G.walls.set(wk(i,CFG.SIZE_Y-1),{hp:999,mhp:999,t:'border'});
             }
-            
-            console.log('🌙 Ночь', currentNight, '- Красных:', reds.length);
+            for(let i=0;i<CFG.SIZE_Y;i++) {
+                G.walls.set(wk(0,i),{hp:999,mhp:999,t:'border'});
+                G.walls.set(wk(CFG.SIZE_X-1,i),{hp:999,mhp:999,t:'border'});
+            }
+            while(true){
+                const x=5+Math.random()*(CFG.SIZE_X-10)|0, y=3+Math.random()*(CFG.SIZE_Y-6)|0;
+                if(!G.walls.has(wk(x,y))){G.blue.push({x,y,sh:false,sr:true});break;}
+            }
+            G.wood=CFG.START_WOOD; G.stone=CFG.START_STONE; G.cry=CFG.START_CRYSTALS;
+            genRes();
         }
         
-        function startGame() {
-            console.log('🎮 НАЧАЛО ИГРЫ');
-            currentNight = 1;
-            woodCount = 5;
-            stoneCount = 3;
-            crystals = 2;
-            blueX = 12;
-            blueY = 9;
-            score = 0;
-            startDay();
+        function spawnRed() {
+            G.red=[];
+            const c=rcnt(G.night), hp=rhp(G.night);
+            for(let i=0;i<c;i++) while(true){
+                const s=['t','b','l','r'][Math.random()*4|0];
+                let x,y;
+                if(s=='t'){x=1+Math.random()*(CFG.SIZE_X-2)|0;y=1;}
+                else if(s=='b'){x=1+Math.random()*(CFG.SIZE_X-2)|0;y=CFG.SIZE_Y-2;}
+                else if(s=='l'){x=1;y=1+Math.random()*(CFG.SIZE_Y-2)|0;}
+                else{x=CFG.SIZE_X-2;y=1+Math.random()*(CFG.SIZE_Y-2)|0;}
+                if(!G.walls.has(wk(x,y))){G.red.push({x,y,hp});break;}
+            }
         }
         
-        // ==================== ДВИЖЕНИЕ ====================
-        function moveBlue(dx, dy) {
-            const nx = blueX + dx;
-            const ny = blueY + dy;
-            
-            // Проверка границ
-            if (nx < 0 || nx >= CONFIG.SIZE_X || ny < 0 || ny >= CONFIG.SIZE_Y) return;
-            
-            // Проверка стен
-            if (walls.some(w => w.x === nx && w.y === ny)) return;
-            
-            blueX = nx;
-            blueY = ny;
-            
-            // Проверка столкновения с красными
-            if (gameState === 'night') {
-                for (const red of reds) {
-                    if (Math.abs(red.x - blueX) < 1 && Math.abs(red.y - blueY) < 1) {
-                        gameState = 'game_over';
-                        score = currentNight - 1;
-                        if (score > bestScore) {
-                            bestScore = score;
-                            localStorage.setItem('cs_best', bestScore);
+        // ==================== BFS ====================
+        function bfs(s,t){
+            const q=[s], cf=new Map();
+            cf.set(`${s.x},${s.y}`,null);
+            while(q.length){
+                const c=q.shift();
+                if(c.x==t.x&&c.y==t.y) break;
+                for(const d of[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]){
+                    const nx=c.x+d.x, ny=c.y+d.y, nk=`${nx},${ny}`;
+                    if(nx<0||nx>=CFG.SIZE_X||ny<0||ny>=CFG.SIZE_Y||G.walls.has(nk)||cf.has(nk)) continue;
+                    cf.set(nk,`${c.x},${c.y}`); q.push({x:nx,y:ny});
+                }
+            }
+            const tk=`${t.x},${t.y}`;
+            if(!cf.has(tk)) return null;
+            const p=[]; let ck=tk;
+            while(ck!==`${s.x},${s.y}`){const[x,y]=ck.split(',').map(Number);p.unshift({x,y});ck=cf.get(ck);}
+            return p;
+        }
+        
+        // ==================== MOVEMENT ====================
+        function moveB(dx,dy){
+            if(G.phase!='day'&&G.phase!='night'||!G.blue.length||G.bMov) return;
+            const b=G.blue[0], nx=Math.round(b.x)+dx, ny=Math.round(b.y)+dy;
+            if(!free(nx,ny)) return;
+            G.bMov=true; G.bSX=Math.round(b.x); G.bSY=Math.round(b.y);
+            G.bTX=nx; G.bTY=ny; G.bST=Date.now()/1000;
+        }
+        
+        function updB(){
+            if(!G.bMov) return;
+            const t=Date.now()/1000-G.bST;
+            if(t>=CFG.MOVE_TIME){
+                G.blue[0].x=G.bTX; G.blue[0].y=G.bTY; G.bMov=false;
+                for(const tel of G.teles){
+                    if(Math.round(G.blue[0].x)==tel.x&&Math.round(G.blue[0].y)==tel.y){
+                        for(let a=0;a<50;a++){
+                            const nx=1+Math.random()*(CFG.SIZE_X-2)|0, ny=1+Math.random()*(CFG.SIZE_Y-2)|0;
+                            if(free(nx,ny)&&(nx!=tel.x||ny!=tel.y)){G.blue[0].x=nx;G.blue[0].y=ny;msg('🌀 Телепорт!');break;}
                         }
-                        console.log('💀 ПОРАЖЕНИЕ! Ночей:', score);
+                        break;
+                    }
+                }
+                chkNear();
+            }else{
+                const p=t/CFG.MOVE_TIME;
+                G.blue[0].x=G.bSX+(G.bTX-G.bSX)*p;
+                G.blue[0].y=G.bSY+(G.bTY-G.bSY)*p;
+            }
+        }
+        
+        function moveR(i,tx,ty){
+            if(i>=G.red.length) return;
+            G.rMov.set(i,{sx:G.red[i].x,sy:G.red[i].y,tx,ty,st:Date.now()/1000});
+        }
+        
+        function updR(){
+            const n=Date.now()/1000;
+            for(const[i,m]of G.rMov){
+                if(i>=G.red.length){G.rMov.delete(i);continue;}
+                const e=n-m.st;
+                if(e>=CFG.MOVE_TIME){G.red[i].x=m.tx;G.red[i].y=m.ty;G.rMov.delete(i);}
+                else{const p=e/CFG.MOVE_TIME;G.red[i].x=m.sx+(m.tx-m.sx)*p;G.red[i].y=m.sy+(m.ty-m.sy)*p;}
+            }
+        }
+        
+        // ==================== COMBAT ====================
+        function twrAtk(){
+            if(G.phase!='night') return;
+            const n=Date.now()/1000;
+            for(const t of G.towers){
+                if(n-t.ls<CFG.TOWER_CD) continue;
+                let cr=null, cd=t.r+1;
+                for(const r of G.red){
+                    if(r.hp<=0) continue;
+                    const d=Math.abs(t.x-Math.round(r.x))+Math.abs(t.y-Math.round(r.y));
+                    if(d<=t.r&&d<cd){cd=d;cr=r;}
+                }
+                if(cr){t.ls=n;G.bullets.push({x:t.x,y:t.y,tx:Math.round(cr.x),ty:Math.round(cr.y),dmg:t.dmg,st:n,tr:cr});}
+            }
+        }
+        
+        function updBul(){
+            if(G.phase!='night') return;
+            const n=Date.now()/1000;
+            for(let i=G.bullets.length-1;i>=0;i--){
+                const b=G.bullets[i], p=Math.min(1,(n-b.st)/0.3);
+                b.cx=b.x+(b.tx-b.x)*p; b.cy=b.y+(b.ty-b.y)*p;
+                if(p>=1){
+                    if(b.tr.hp>0){b.tr.hp-=b.dmg;if(b.tr.hp<=0){const j=G.red.indexOf(b.tr);if(j!=-1)G.red.splice(j,1);msg('💀 Убит!');}}
+                    G.bullets.splice(i,1);
+                }
+            }
+        }
+        
+        function movRed(){
+            if(G.phase!='night') return;
+            for(let i=G.red.length-1;i>=0;i--){
+                const r=G.red[i]; if(r.hp<=0) continue;
+                if(!G.blue.length){G.phase='game_over';msg('💀 Поражение!',3);return;}
+                const b=G.blue[0], bp={x:Math.round(b.x),y:Math.round(b.y)}, rp={x:Math.round(r.x),y:Math.round(r.y)};
+                if(rp.x==bp.x&&rp.y==bp.y){
+                    if(b.sh&&!b.sr){b.sh=false;b.sr=false;msg('🛡️ Щит!');
+                        for(const d of[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]){
+                            const nx=rp.x+d.x,ny=rp.y+d.y;
+                            if(nx>=0&&nx<CFG.SIZE_X&&ny>=0&&ny<CFG.SIZE_Y&&!G.walls.has(wk(nx,ny))){moveR(i,nx,ny);break;}
+                        }
+                    }else{G.phase='game_over';msg('💀 Конец!',3);return;}
+                }
+                const rk=wk(rp.x,rp.y);
+                if(G.walls.has(rk)&&G.walls.get(rk).hp<999){if(!G.wAtk.has(rk)){G.wAtk.set(rk,0);}continue;}
+                if(G.wAtk.has(rk)) G.wAtk.delete(rk);
+                const p=bfs(rp,bp);
+                if(p&&p.length&&Math.random()<CFG.RED_SPEED) moveR(i,p[0].x,p[0].y);
+            }
+        }
+        
+        function updWall(){
+            if(G.phase!='night') return;
+            for(const[k,p]of G.wAtk){
+                if(!G.walls.has(k)){G.wAtk.delete(k);continue;}
+                const w=G.walls.get(k); if(w.hp==999){G.wAtk.delete(k);continue;}
+                const[wx,wy]=k.split(',').map(Number);
+                let on=false;
+                for(const r of G.red) if(r.hp>0&&Math.round(r.x)==wx&&Math.round(r.y)==wy){on=true;break;}
+                if(on){
+                    const bt=w.t=='wood_wall'?CFG.WALL_BREAK_WOOD:CFG.WALL_BREAK_STONE, np=p+1/60;
+                    if(np>=bt){G.towers=G.towers.filter(t=>t.x!=wx||t.y!=wy);G.walls.delete(k);G.wAtk.delete(k);msg('💥 Стена!');}
+                    else G.wAtk.set(k,np);
+                }
+            }
+        }
+        
+        function actTrp(){
+            if(G.phase!='night') return;
+            for(let i=G.traps.length-1;i>=0;i--){
+                const t=G.traps[i];
+                for(let j=G.red.length-1;j>=0;j--){
+                    const r=G.red[j];
+                    if(Math.round(r.x)==t.x&&Math.round(r.y)==t.y){
+                        if(t.t=='fire'){r.hp-=2;G.cry++;msg('🔥 +1💎');}
+                        else msg('⏳ Заморозка!');
+                        G.traps.splice(i,1); break;
                     }
                 }
             }
         }
         
-        // ==================== ОБНОВЛЕНИЕ ====================
-        function update(dt) {
-            if (gameState === 'day' || gameState === 'night') {
-                timeLeft -= dt;
-                
-                if (timeLeft <= 0) {
-                    if (gameState === 'day') {
-                        currentNight++;
-                        startNight();
-                    } else {
-                        startDay();
-                    }
-                }
+        // ==================== INTERACTION ====================
+        function chkNear(){
+            if(!G.blue.length){G.near=null;return;}
+            const bx=Math.round(G.blue[0].x), by=Math.round(G.blue[0].y);
+            for(const r of G.res) if(Math.abs(r.x-bx)+Math.abs(r.y-by)<=1){G.near={t:'res',d:r};return;}
+            for(const[k,w]of G.walls){
+                if(w.t=='border') continue;
+                const[wx,wy]=k.split(',').map(Number);
+                if(Math.abs(wx-bx)+Math.abs(wy-by)<=1){G.near={t:'wall',x:wx,y:wy,wt:w.t};return;}
             }
-            
-            // Движение красных
-            if (gameState === 'night') {
-                for (const red of reds) {
-                    if (Math.random() < 0.05) {
-                        const dx = Math.sign(blueX - red.x) * (Math.random() < 0.7 ? 1 : 0);
-                        const dy = Math.sign(blueY - red.y) * (Math.random() < 0.7 ? 0 : 1);
-                        
-                        const nx = red.x + (Math.random() < 0.5 ? dx : 0);
-                        const ny = red.y + (Math.random() < 0.5 ? dy : 0);
-                        
-                        if (nx >= 0 && nx < CONFIG.SIZE_X && ny >= 0 && ny < CONFIG.SIZE_Y) {
-                            if (!walls.some(w => w.x === Math.round(nx) && w.y === Math.round(ny))) {
-                                red.x = nx;
-                                red.y = ny;
-                            }
-                        }
-                    }
-                    
-                    // Проверка столкновения
-                    if (Math.abs(red.x - blueX) < 0.8 && Math.abs(red.y - blueY) < 0.8) {
-                        gameState = 'game_over';
-                        score = currentNight - 1;
-                        if (score > bestScore) {
-                            bestScore = score;
-                            localStorage.setItem('cs_best', bestScore);
-                        }
-                        console.log('💀 ПОРАЖЕНИЕ!');
-                    }
-                }
+            for(let i=0;i<G.towers.length;i++){const t=G.towers[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'tower',i};return;}}
+            for(let i=0;i<G.traps.length;i++){const t=G.traps[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'trap',i};return;}}
+            for(let i=0;i<G.totems.length;i++){const t=G.totems[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'totem',i};return;}}
+            for(let i=0;i<G.teles.length;i++){const t=G.teles[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'tele',i};return;}}
+            G.near=null;
+        }
+        
+        function collect(){
+            if(!G.blue.length||G.phase!='day'){msg('❌ Только днём!');return;}
+            chkNear();
+            if(!G.near){msg('❌ Ничего рядом');return;}
+            const o=G.near;
+            if(o.t=='res'){
+                const r=o.d;
+                if(r.t=='tree'){G.wood++;msg('🌲 +1');}
+                else if(r.t=='rock'){G.stone++;msg('🪨 +1');}
+                else if(r.t=='crystal'){G.cry++;msg('✨ +1');}
+                else if(r.t=='shield'){G.blue[0].sh=true;G.blue[0].sr=true;msg('🛡️ Щит!');}
+                G.res=G.res.filter(x=>!(x.x==r.x&&x.y==r.y));
+            }else if(o.t=='wall'){if(o.wt=='wood_wall')G.wood++;else G.stone++;G.wAtk.delete(wk(o.x,o.y));G.walls.delete(wk(o.x,o.y));msg('🧱 Демонт.');}
+            else if(o.t=='tower'){const t=G.towers[o.i];if(t.t=='wood')G.wood+=2;else G.stone+=2;G.towers.splice(o.i,1);msg('🗼 Демонт.');}
+            else if(o.t=='trap'){G.cry++;G.traps.splice(o.i,1);msg('⚡ +1💎');}
+            else if(o.t=='totem'){G.cry+=2;G.totems.splice(o.i,1);msg('✨ +2💎');}
+            else if(o.t=='tele'){G.cry+=3;G.teles.splice(o.i,1);msg('🌀 +3💎');}
+            G.near=null;
+        }
+        
+        function shield(){
+            if(!G.blue.length||G.phase!='day'){msg('❌ Только днём!');return;}
+            const b=G.blue[0];
+            if(b.sh&&b.sr){b.sr=false;msg('🛡️ Щит!');setTimeout(()=>{b.sh=false;},CFG.SHIELD_TIME*1000);}
+            else msg('❌ Нет щита');
+        }
+        
+        function build(x,y,t){
+            if(!free(x,y)){msg('❌ Занято!');return false;}
+            const costs={wood_wall:{r:'wood',a:CFG.WOOD_WALL},stone_wall:{r:'stone',a:CFG.STONE_WALL},wood_tower:{r:'wood',a:CFG.WOOD_TOWER},stone_tower:{r:'stone',a:CFG.STONE_TOWER},totem_light:{r:'cry',a:CFG.TOTEM},time_trap:{r:'cry',a:CFG.TRAP_TIME},fire_trap:{r:'cry',a:CFG.TRAP_FIRE},teleport:{r:'cry',a:CFG.TELEPORT}};
+            const c=costs[t]; if(!c) return false;
+            let ok=(c.r=='wood'?G.wood:c.r=='stone'?G.stone:G.cry)>=c.a;
+            if(!ok){msg('❌ Не хватает!');return false;}
+            if(c.r=='wood')G.wood-=c.a;else if(c.r=='stone')G.stone-=c.a;else G.cry-=c.a;
+            if(t=='wood_wall'){G.walls.set(wk(x,y),{hp:CFG.WALL_BREAK_WOOD,mhp:CFG.WALL_BREAK_WOOD,t:'wood_wall'});}
+            else if(t=='stone_wall'){G.walls.set(wk(x,y),{hp:CFG.WALL_BREAK_STONE,mhp:CFG.WALL_BREAK_STONE,t:'stone_wall'});}
+            else if(t=='wood_tower'){G.towers.push({x,y,t:'wood',dmg:.5,r:4,ls:0});}
+            else if(t=='stone_tower'){G.towers.push({x,y,t:'stone',dmg:1,r:5,ls:0});}
+            else if(t=='totem_light'){G.totems.push({x,y,t:'light',r:4});}
+            else if(t=='time_trap'){G.traps.push({x,y,t:'time'});}
+            else if(t=='fire_trap'){G.traps.push({x,y,t:'fire'});}
+            else if(t=='teleport'){G.teles.push({x,y});}
+            msg('✅ Построено!'); return true;
+        }
+        
+        // ==================== PHASES ====================
+        function chkNEnd(){if(G.phase=='night'&&!G.red.length){msg('🌞 Рассвет!',2);G.time=0;}}
+        
+        function chgPhase(){
+            if(G.phase=='day'){
+                G.phase='night'; G.time=CFG.NIGHT; G.bullets=[]; G.rMov.clear(); G.bMov=false;
+                if(G.blue.length){G.blue[0].x=Math.round(G.blue[0].x);G.blue[0].y=Math.round(G.blue[0].y);}
+                spawnRed(); msg(`🌙 Ночь ${G.night}!`,3);
+            }else{
+                G.phase='day'; G.night++; G.time=CFG.DAY; G.score=G.night-1;
+                if(G.score>G.best){G.best=G.score;localStorage.setItem('cs_best',G.best);}
+                G.red=[]; G.bullets=[]; G.rMov.clear();
+                if(G.blue.length){G.blue[0].x=Math.round(G.blue[0].x);G.blue[0].y=Math.round(G.blue[0].y);}
+                genRes(); msg(`🌞 День ${G.night}!`,3);
             }
         }
         
-        // ==================== ОТРИСОВКА ====================
-        function draw() {
-            const C = CONFIG.CELL;
+        function startGame(){
+            G.phase='day'; G.night=1; G.time=CFG.DAY;
+            G.wood=CFG.START_WOOD; G.stone=CFG.START_STONE; G.cry=CFG.START_CRYSTALS;
+            G.build=null; G.bMov=false; G.rMov.clear(); G.score=0;
+            genInit(); chkNear(); msg('🎮 Игра началась!',3);
+        }
+        
+        // ==================== RENDER ====================
+        const spr = (k,x,y,w,h) => { if(sprites[k]) { ctx.drawImage(sprites[k],x,y,w,h); return true; } return false; };
+        
+        function draw(){
+            const C=CFG.CELL;
+            ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,0,canvas.width,canvas.height);
             
-            // Очистка
-            ctx.fillStyle = '#1a1a2e';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if(G.phase=='menu'){drawMenu();return;}
             
-            if (gameState === 'menu') {
-                drawMenu();
-                return;
+            // Grid
+            for(let y=0;y<CFG.SIZE_Y;y++) for(let x=0;x<CFG.SIZE_X;x++){
+                ctx.fillStyle=(x+y)%2?'#1e4a1e':'#2d5a2c'; ctx.fillRect(x*C,y*C,C,C);
             }
             
-            // Сетка
-            for (let y = 0; y < CONFIG.SIZE_Y; y++) {
-                for (let x = 0; x < CONFIG.SIZE_X; x++) {
-                    ctx.fillStyle = (x + y) % 2 === 0 ? '#2d5a2c' : '#1e4a1e';
-                    ctx.fillRect(x * C, y * C, C, C);
+            // Resources
+            for(const r of G.res){
+                const rx=r.x*C, ry=r.y*C, cx=rx+C/2, cy=ry+C/2;
+                if(r.t=='tree'){if(!spr('tree',rx,ry,C,C)){ctx.fillStyle='#228B22';ctx.beginPath();ctx.arc(cx,cy,C*.35,0,6.28);ctx.fill();}}
+                else if(r.t=='rock'){if(!spr('rock',rx,ry,C,C)){ctx.fillStyle='#808080';ctx.fillRect(rx+C*.2,ry+C*.2,C*.6,C*.6);}}
+                else if(r.t=='crystal'){if(!spr('crystal',rx,ry,C,C)){ctx.fillStyle='#FF69B4';ctx.beginPath();ctx.arc(cx,cy,C*.3,0,6.28);ctx.fill();}}
+                else if(r.t=='shield'){if(!spr('shield',rx,ry,C,C)){ctx.fillStyle='#FFD700';ctx.beginPath();ctx.arc(cx,cy,C*.3,0,6.28);ctx.fill();}}
+            }
+            
+            // Walls
+            for(const[k,w]of G.walls){
+                const[x,y]=k.split(',').map(Number);
+                if(w.hp==999){ctx.fillStyle='#4a3728';ctx.fillRect(x*C,y*C,C,C);}
+                else{
+                    const sk=w.t=='wood_wall'?'wall_wood':'wall_stone';
+                    if(!spr(sk,x*C,y*C,C,C)){ctx.fillStyle=w.t=='wood_wall'?'#8B4513':'#808080';ctx.fillRect(x*C+2,y*C+2,C-4,C-4);}
+                    const p=G.wAtk.get(k)||0, bw=Math.max(0,(w.mhp-p)/w.mhp)*(C-10);
+                    ctx.fillStyle='#333';ctx.fillRect(x*C+5,y*C+C-8,C-10,5);
+                    ctx.fillStyle='#0F0';ctx.fillRect(x*C+5,y*C+C-8,bw,5);
                 }
             }
             
-            // Стены
-            for (const wall of walls) {
-                ctx.fillStyle = '#8B4513';
-                ctx.fillRect(wall.x * C + 2, wall.y * C + 2, C - 4, C - 4);
-                ctx.strokeStyle = '#654321';
-                ctx.strokeRect(wall.x * C + 2, wall.y * C + 2, C - 4, C - 4);
+            // Towers
+            for(const t of G.towers){
+                const sk=t.t=='wood'?'tower_wood':'tower_stone';
+                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.t=='wood'?'#CD853F':'#A0A0A0';ctx.fillRect(t.x*C+C*.2,t.y*C+C*.2,C*.6,C*.6);}
+                ctx.strokeStyle='rgba(255,215,0,.2)';ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,t.r*C,0,6.28);ctx.stroke();ctx.setLineDash([]);
             }
             
-            // Ресурсы (случайные)
-            ctx.fillStyle = '#228B22';
-            for (let i = 0; i < 10; i++) {
-                const x = ((i * 137 + 50) % CONFIG.SIZE_X) * C + C/2;
-                const y = ((i * 97 + 30) % CONFIG.SIZE_Y) * C + C/2;
-                ctx.beginPath();
-                ctx.arc(x, y, C * 0.3, 0, Math.PI * 2);
-                ctx.fill();
+            // Totems, Traps, Teleports
+            for(const t of G.totems) if(!spr('totem_light',t.x*C,t.y*C,C,C)){ctx.fillStyle='#08F';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.3,0,6.28);ctx.fill();}
+            for(const t of G.traps){
+                const sk=t.t=='time'?'trap_time':'trap_fire';
+                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.t=='time'?'#FA0':'#F44';ctx.fillRect(t.x*C+C*.25,t.y*C+C*.25,C*.5,C*.5);}
+            }
+            for(const t of G.teles) if(!spr('teleport',t.x*C,t.y*C,C,C)){ctx.fillStyle='#93C';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.35,0,6.28);ctx.fill();}
+            
+            // Bullets
+            for(const b of G.bullets){
+                ctx.fillStyle='#FF0';ctx.shadowBlur=8;ctx.shadowColor='#FFD700';
+                ctx.beginPath();ctx.arc((b.cx||b.x)*C+C/2,(b.cy||b.y)*C+C/2,4,0,6.28);ctx.fill();ctx.shadowBlur=0;
             }
             
-            // Синий игрок
-            const bx = blueX * C + C/2;
-            const by = blueY * C + C/2;
-            
-            ctx.fillStyle = '#4488FF';
-            ctx.beginPath();
-            ctx.arc(bx, by, C * 0.4, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Глаза
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(bx - C * 0.12, by - C * 0.08, C * 0.1, 0, Math.PI * 2);
-            ctx.arc(bx + C * 0.12, by - C * 0.08, C * 0.1, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.fillStyle = 'black';
-            ctx.beginPath();
-            ctx.arc(bx - C * 0.12, by - C * 0.08, C * 0.05, 0, Math.PI * 2);
-            ctx.arc(bx + C * 0.12, by - C * 0.08, C * 0.05, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Красные враги
-            for (const red of reds) {
-                const rx = red.x * C + C/2;
-                const ry = red.y * C + C/2;
-                
-                ctx.fillStyle = '#FF3333';
-                ctx.beginPath();
-                ctx.arc(rx, ry, C * 0.35, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // HP
-                ctx.fillStyle = 'white';
-                ctx.font = `bold ${Math.max(10, C * 0.3)}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.fillText(`♥${red.hp}`, rx, ry - C * 0.2);
-                ctx.textAlign = 'left';
+            // Blue
+            if(G.blue.length){
+                const b=G.blue[0], bx=b.x*C, by=b.y*C, sk=G.phase=='night'?'blue_scared':'blue_idle';
+                if(!spr(sk,bx,by,C,C)){
+                    ctx.fillStyle=G.phase=='night'?'#69F':'#48F';
+                    ctx.beginPath();ctx.arc(bx+C/2,by+C/2,C*.35,0,6.28);ctx.fill();
+                }
+                if(b.sh&&!b.sr){ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.beginPath();ctx.arc(bx+C/2,by+C/2,C*.45,0,6.28);ctx.stroke();}
             }
             
-            // UI панель
-            drawUI();
+            // Reds
+            for(const r of G.red){
+                if(r.hp<=0) continue;
+                const rx=r.x*C, ry=r.y*C, sk=G.phase=='day'?'red_sleep':'red';
+                if(!spr(sk,rx,ry,C,C)){
+                    ctx.fillStyle=G.phase=='day'?'#633':'#F33';
+                    ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.35,0,6.28);ctx.fill();
+                }
+                ctx.fillStyle='#FAA';ctx.font=`bold ${Math.max(10,C*.35)}px Arial`;ctx.textAlign='center';
+                ctx.fillText(`♥${r.hp}`,rx+C/2,ry-C*.3);ctx.textAlign='left';
+            }
+            
+            // Shop
+            if(G.phase=='day'){
+                const sx=canvas.width-170;
+                ctx.fillStyle='rgba(13,13,26,.95)';ctx.fillRect(sx-5,10,165,canvas.height-80);
+                ctx.strokeStyle='#FFD700';ctx.strokeRect(sx-5,10,165,canvas.height-80);
+                ctx.fillStyle='#FFD700';ctx.font='bold 11px Arial';ctx.textAlign='center';ctx.fillText('🏪 МАГАЗИН',sx+80,25);ctx.textAlign='left';
+                const items=[['Дер.стена','wood_wall',CFG.WOOD_WALL,'wood'],['Кам.стена','stone_wall',CFG.STONE_WALL,'stone'],['Дер.башня','wood_tower',CFG.WOOD_TOWER,'wood'],['Кам.башня','stone_tower',CFG.STONE_TOWER,'stone'],['Тотем','totem_light',CFG.TOTEM,'cry'],['Лов.врем','time_trap',CFG.TRAP_TIME,'cry'],['Огн.лов','fire_trap',CFG.TRAP_FIRE,'cry'],['Телепорт','teleport',CFG.TELEPORT,'cry']];
+                items.forEach(([n,t,c,r],i)=>{
+                    const y=42+i*28;
+                    if(G.build==t){ctx.fillStyle='rgba(255,215,0,.25)';ctx.fillRect(sx,y-10,155,24);}
+                    ctx.fillStyle='white';ctx.font='9px Arial';ctx.fillText(n,sx+5,y+2);
+                    ctx.fillText((r=='cry'?'💎':r=='wood'?'🪵':'🪨')+c,sx+110,y+2);
+                });
+            }
             
             // Game Over
-            if (gameState === 'game_over') {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                ctx.fillStyle = '#FF0000';
-                ctx.font = 'bold 36px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('💀 ПОРАЖЕНИЕ 💀', canvas.width / 2, canvas.height / 2 - 20);
-                
-                ctx.fillStyle = 'white';
-                ctx.font = '18px Arial';
-                ctx.fillText(`Ночей: ${score}`, canvas.width / 2, canvas.height / 2 + 25);
-                ctx.fillText('R / Клик - Рестарт', canvas.width / 2, canvas.height / 2 + 55);
-                ctx.textAlign = 'left';
+            if(G.phase=='game_over'){
+                ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillStyle='red';ctx.font='bold 32px Arial';ctx.textAlign='center';
+                ctx.fillText('💀 ПОРАЖЕНИЕ 💀',canvas.width/2,canvas.height/2-20);
+                ctx.fillStyle='white';ctx.font='16px Arial';
+                ctx.fillText(`Ночей: ${G.score}`,canvas.width/2,canvas.height/2+20);
+                ctx.fillText('R/тап - рестарт',canvas.width/2,canvas.height/2+50);
+                ctx.textAlign='left';
             }
+            
+            // UI
+            drawUI();
         }
         
-        function drawUI() {
-            const uy = CONFIG.CELL * CONFIG.SIZE_Y;
-            const C = CONFIG.CELL;
+        function drawUI(){
+            const uy=CFG.CELL*CFG.SIZE_Y, C=CFG.CELL;
+            ctx.fillStyle='#1a1a2e';ctx.fillRect(0,uy,canvas.width,70);
+            ctx.strokeStyle='#FFD700';ctx.strokeRect(0,uy,canvas.width,70);
             
-            // Фон UI
-            ctx.fillStyle = '#1a1a2e';
-            ctx.fillRect(0, uy, canvas.width, 70);
-            ctx.strokeStyle = '#FFD700';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(0, uy, canvas.width, 70);
-            
-            // Информация
-            ctx.fillStyle = gameState === 'day' ? '#FFD700' : '#8B6CFF';
-            ctx.font = 'bold 14px Arial';
-            const phaseText = gameState === 'day' ? '☀️ ДЕНЬ' : '🌙 НОЧЬ';
-            ctx.fillText(`${phaseText} ${currentNight}`, 10, uy + 25);
-            
-            ctx.fillStyle = '#FF4444';
-            ctx.fillText(`👹 ${reds.length}`, 150, uy + 25);
-            
-            ctx.fillStyle = '#8B6914';
-            ctx.fillText(`🪵 ${woodCount}`, 230, uy + 25);
-            
-            ctx.fillStyle = '#A0A0A0';
-            ctx.fillText(`🪨 ${stoneCount}`, 300, uy + 25);
-            
-            ctx.fillStyle = '#FFD700';
-            ctx.fillText(`💎 ${crystals}`, 370, uy + 25);
-            
-            // Таймер
-            const mins = Math.floor(timeLeft / 60);
-            const secs = Math.floor(timeLeft % 60);
-            ctx.fillStyle = '#FFE66D';
-            ctx.fillText(`⏱ ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`, canvas.width - 120, uy + 25);
-            
-            // Прогресс-бар
-            const maxTime = gameState === 'day' ? CONFIG.DAY_DURATION : CONFIG.NIGHT_DURATION;
-            const barW = (timeLeft / maxTime) * (canvas.width - 200);
-            ctx.fillStyle = '#333';
-            ctx.fillRect(60, uy + 35, canvas.width - 200, 8);
-            ctx.fillStyle = gameState === 'day' ? '#FFD700' : '#8B3A3A';
-            ctx.fillRect(60, uy + 35, barW, 8);
-            
-            // Рекорд
-            ctx.fillStyle = '#FFD700';
-            ctx.font = '11px Arial';
-            ctx.fillText(`🏆 ${bestScore}`, canvas.width - 140, uy + 55);
+            spr(G.phase=='day'?'day':'night',10,uy+5,40,40);
+            ctx.fillStyle=G.phase=='day'?'#FFD700':'#8B6CFF';ctx.font='bold 14px Arial';
+            ctx.fillText(`${G.phase=='day'?'☀️':'🌙'} ${G.night}`,55,uy+25);
+            ctx.fillStyle='#F44';ctx.fillText(`👹${G.red.length}`,160,uy+25);
+            ctx.fillStyle='#8B6914';ctx.fillText(`🪵${G.wood}`,230,uy+25);
+            ctx.fillStyle='#A0A0A0';ctx.fillText(`🪨${G.stone}`,300,uy+25);
+            spr('ui_crystal',370,uy+8,24,24); ctx.fillStyle='#FFD700';ctx.fillText(`${G.cry}`,398,uy+25);
+            const m=G.time/60|0, s=G.time%60|0;
+            ctx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,canvas.width-120,uy+25);
+            const mt=G.phase=='day'?CFG.DAY:CFG.NIGHT, bw=(G.time/mt)*(canvas.width-200);
+            ctx.fillStyle='#333';ctx.fillRect(60,uy+35,canvas.width-200,8);
+            ctx.fillStyle=G.phase=='day'?'#FFD700':'#8B3A3A';ctx.fillRect(60,uy+35,bw,8);
+            ctx.fillStyle='#FFD700';ctx.font='11px Arial';ctx.fillText(`🏆${G.best}`,canvas.width-140,uy+55);
         }
         
-        function drawMenu() {
-            const cx = canvas.width / 2;
-            const cy = canvas.height / 2;
-            
-            // Фон
-            ctx.fillStyle = '#0a0a1a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Заголовок
-            ctx.fillStyle = '#FFD700';
-            ctx.font = `bold ${Math.min(36, canvas.width / 15)}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.fillText('🏰 CRYSTAL SURVIVORS 🏰', cx, cy - 100);
-            
-            // Подсказка
-            ctx.fillStyle = 'white';
-            ctx.font = `${Math.min(16, canvas.width / 35)}px Arial`;
-            ctx.fillText('Строй защиту, переживи ночи!', cx, cy - 50);
-            
-            // Кнопка
-            const btnW = 250, btnH = 55;
-            const btnX = cx - btnW/2, btnY = cy - 20;
-            
-            ctx.fillStyle = '#2a2a3a';
-            ctx.fillRect(btnX, btnY, btnW, btnH);
-            ctx.strokeStyle = '#FFD700';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(btnX, btnY, btnW, btnH);
-            
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 22px Arial';
-            ctx.fillText('▶ НАЧАТЬ ИГРУ', cx, btnY + 38);
-            
-            // Управление
-            ctx.fillStyle = '#AAAAAA';
-            ctx.font = '14px Arial';
-            ctx.fillText('WASD/Стрелки - движение', cx, cy + 70);
-            ctx.fillText('E - сбор ресурсов', cx, cy + 95);
-            ctx.fillText('R - рестарт', cx, cy + 120);
-            
-            if (bestScore > 0) {
-                ctx.fillStyle = '#FFD700';
-                ctx.font = 'bold 16px Arial';
-                ctx.fillText(`🏆 Лучший результат: ${bestScore} ночей`, cx, cy + 155);
-            }
-            
-            ctx.textAlign = 'left';
+        function drawMenu(){
+            const cx=canvas.width/2;
+            ctx.fillStyle='#0a0a1a';ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.fillStyle='#FFD700';ctx.font=`bold ${Math.min(36,canvas.width/16)}px Arial`;ctx.textAlign='center';
+            ctx.fillText('🏰 CRYSTAL SURVIVORS 🏰',cx,100);
+            ctx.fillStyle='white';ctx.font=`${Math.min(16,canvas.width/35)}px Arial`;
+            ctx.fillText('Строй защиту, переживи ночи!',cx,150);
+            ctx.fillStyle='#2a2a3a';ctx.fillRect(cx-120,200,240,50);
+            ctx.strokeStyle='#FFD700';ctx.strokeRect(cx-120,200,240,50);
+            ctx.fillStyle='white';ctx.font='bold 20px Arial';ctx.fillText('▶ НАЧАТЬ ИГРУ',cx,232);
+            ctx.fillStyle='#AAA';ctx.font='13px Arial';
+            ctx.fillText('WASD/Стрелки [E]сбор [F]щит',cx,290);
+            ctx.fillText('Клик по магазину - строительство',cx,315);
+            if(G.best>0){ctx.fillStyle='#FFD700';ctx.fillText(`🏆 Рекорд: ${G.best} ночей`,cx,355);}
+            ctx.textAlign='left';
         }
         
-        // ==================== УПРАВЛЕНИЕ ====================
-        document.addEventListener('keydown', (e) => {
-            const key = e.key.toLowerCase();
-            
-            if (gameState === 'game_over') {
-                if (key === 'r') startGame();
-                return;
-            }
-            
-            if (gameState === 'menu') {
-                if (key === 'enter' || key === ' ') startGame();
-                return;
-            }
-            
-            if (gameState !== 'day' && gameState !== 'night') return;
-            
-            if (key === 'e') {
-                // Сбор ресурсов (заглушка)
-                console.log('Сбор ресурсов');
-                return;
-            }
-            
-            if (key === 'r') {
-                startGame();
-                return;
-            }
-            
-            let dx = 0, dy = 0;
-            if (key === 'w' || key === 'arrowup') dy = -1;
-            else if (key === 's' || key === 'arrowdown') dy = 1;
-            else if (key === 'a' || key === 'arrowleft') dx = -1;
-            else if (key === 'd' || key === 'arrowright') dx = 1;
+        // ==================== INPUT ====================
+        document.addEventListener('keydown',e=>{
+            const k=e.key.toLowerCase();
+            if(G.phase=='game_over'){if(k=='r')startGame();return;}
+            if(G.phase=='menu'){if(k=='enter'||k==' '){startGame();return;}return;}
+            if(G.phase!='day'&&G.phase!='night') return;
+            if(k=='e'){e.preventDefault();collect();return;}
+            if(k=='f'){e.preventDefault();shield();return;}
+            let dx=0,dy=0;
+            if(k=='w'||k=='arrowup')dy=-1;
+            else if(k=='s'||k=='arrowdown')dy=1;
+            else if(k=='a'||k=='arrowleft')dx=-1;
+            else if(k=='d'||k=='arrowright')dx=1;
             else return;
-            
-            e.preventDefault();
-            moveBlue(dx, dy);
+            e.preventDefault(); moveB(dx,dy);
         });
         
-        canvas.addEventListener('click', (e) => {
-            if (gameState === 'menu' || gameState === 'game_over') {
-                startGame();
-                return;
+        canvas.addEventListener('click',e=>{
+            if(G.phase=='game_over'||G.phase=='menu'){startGame();return;}
+            if(G.phase!='day') return;
+            const r=canvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+            const sx=canvas.width-170;
+            if(x>=sx&&y<canvas.height-70){
+                const items=['wood_wall','stone_wall','wood_tower','stone_tower','totem_light','time_trap','fire_trap','teleport'];
+                const idx=((y-42)/28)|0;
+                if(idx>=0&&idx<items.length){G.build=items[idx];return;}
+            }
+            const cx=x/CFG.CELL|0, cy=y/CFG.CELL|0;
+            if(cx>=0&&cx<CFG.SIZE_X&&cy>=0&&cy<CFG.SIZE_Y&&G.build){
+                if(build(cx,cy,G.build)) G.build=null;
             }
         });
         
-        // ==================== ИГРОВОЙ ЦИКЛ ====================
-        let lastTime = performance.now();
-        
-        function gameLoop(currentTime) {
-            const dt = Math.min((currentTime - lastTime) / 1000, 0.1); // Ограничение dt
-            lastTime = currentTime;
-            
-            update(dt);
-            draw();
-            
-            requestAnimationFrame(gameLoop);
+        // ==================== LOOP ====================
+        function upd(){
+            if(G.phase=='day'||G.phase=='night'){
+                G.time-=1/60; if(G.time<=0) chgPhase();
+                updB(); updR(); updWall(); twrAtk(); updBul(); actTrp(); movRed(); chkNEnd(); chkNear();
+            }
         }
         
-        // ==================== ЗАПУСК ====================
-        console.log('✅ Инициализация завершена');
+        function loop(){upd();draw();requestAnimationFrame(loop);}
         
-        // Загружаем рекорд
-        bestScore = parseInt(localStorage.getItem('cs_best') || '0');
-        
-        // Показываем меню
-        gameState = 'menu';
-        
-        // Запускаем цикл
-        requestAnimationFrame(gameLoop);
-        
-        console.log('🎮 Игра готова! Нажмите Enter или кликните для старта');
+        // ==================== START ====================
+        (async ()=>{
+            await initSDK();
+            await loadSprites();
+            document.getElementById('loading').style.display='none';
+            loop();
+        })();
     </script>
 </body>
 </html>
