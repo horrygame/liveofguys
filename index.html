@@ -4,626 +4,431 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>🏰 Crystal Survivors</title>
-    
     <script src="/sdk.js"></script>
-    
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #0a0a1a;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-            font-family: 'Arial', sans-serif;
-            touch-action: none;
-            -webkit-user-select: none;
-            user-select: none;
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{
+            background:#0a0a1a;display:flex;justify-content:center;align-items:center;
+            height:100vh;overflow:hidden;font-family:'Arial',sans-serif;
+            touch-action:none;-webkit-user-select:none;user-select:none;
         }
-        canvas { border: 2px solid #FFD700; display: block; }
-        #loading {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: #FFD700; font-size: 20px; text-align: center; z-index: 10;
-            background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;
-        }
+        canvas{border:2px solid #FFD700;display:block}
+        #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#FFD700;font-size:20px;text-align:center;z-index:10;background:rgba(0,0,0,0.8);padding:20px;border-radius:10px}
+        #skipNight{position:absolute;top:10px;right:10px;background:#FFD700;color:#000;border:none;padding:10px 20px;border-radius:5px;font-weight:bold;cursor:pointer;z-index:5;font-size:14px}
+        #skipNight:hover{background:#FFA500}
     </style>
 </head>
 <body>
     <div id="loading">Загрузка...</div>
+    <button id="skipNight" style="display:none">🌙 ПРОПУСТИТЬ ДЕНЬ (N)</button>
     <canvas id="gameCanvas"></canvas>
-    
     <script>
         // ==================== YANDEX SDK ====================
-        let ysdk = null;
-        
-        async function initSDK() {
-            try {
-                if (typeof YaGames !== 'undefined') {
-                    ysdk = await YaGames.init();
-                    console.log('✅ SDK ready');
-                }
-            } catch(e) { console.log('SDK not available'); }
-        }
+        let ysdk=null;
+        (async()=>{try{if(typeof YaGames!=='undefined')ysdk=await YaGames.init()}catch(e){}})();
         
         // ==================== SPRITES ====================
-        const sprites = {};
-        const spriteFiles = {
-            'blue_idle': 'blue_idle.png',
-            'blue_scared': 'blue_scared.png',
-            'red': 'red.png',
-            'red_sleep': 'red_sleep.png',
-            'crystal': 'crystal.png',
-            'shield': 'shield.png',
-            'tree': 'tree.png',
-            'rock': 'stone.png',
-            'wall_wood': 'wall_wood.png',
-            'wall_stone': 'wall_stone.png',
-            'totem_light': 'totem_light.png',
-            'tower_wood': 'tower_wood.png',
-            'tower_stone': 'tower_stone.png',
-            'teleport': 'teleport.png',
-            'trap_time': 'trap_time.png',
-            'trap_fire': 'trap_fire.png',
-            'ui_crystal': 'ui_crystal.png',
-            'day': 'day.png',
-            'night': 'night.png'
-        };
+        const sprites={};
+        const sf={blue_idle:'blue_idle.png',blue_scared:'blue_scared.png',red:'red.png',red_sleep:'red_sleep.png',
+            crystal:'crystal.png',shield:'shield.png',tree:'tree.png',rock:'stone.png',
+            wall_wood:'wall_wood.png',wall_stone:'wall_stone.png',totem_light:'totem_light.png',
+            tower_wood:'tower_wood.png',tower_stone:'tower_stone.png',teleport:'teleport.png',
+            trap_time:'trap_time.png',trap_fire:'trap_fire.png',ui_crystal:'ui_crystal.png',
+            day:'day.png',night:'night.png'};
         
-        async function loadSprites() {
-            const promises = Object.entries(spriteFiles).map(([key, file]) => {
-                return new Promise(resolve => {
-                    const img = new Image();
-                    img.onload = () => { sprites[key] = img; resolve(); };
-                    img.onerror = () => { sprites[key] = null; resolve(); };
-                    img.src = file;
-                });
-            });
-            await Promise.all(promises);
-            console.log('📦 Sprites loaded:', Object.values(sprites).filter(s => s).length);
-        }
+        (async()=>{
+            const ps=Object.entries(sf).map(([k,f])=>new Promise(r=>{const i=new Image();
+                i.onload=()=>{sprites[k]=i;r()};i.onerror=()=>{sprites[k]=null;r()};i.src=f}));
+            await Promise.all(ps);
+            document.getElementById('loading').style.display='none';
+        })();
         
         // ==================== CONFIG ====================
-        const CFG = {
-            SIZE_X: 25, SIZE_Y: 18, CELL: 32,
-            DAY: 60, NIGHT: 30,
-            START_WOOD: 5, START_STONE: 3, START_CRYSTALS: 2,
-            WOOD_WALL: 3, STONE_WALL: 5,
-            WOOD_TOWER: 8, STONE_TOWER: 12,
-            TOTEM: 8, TRAP_TIME: 5, TRAP_FIRE: 7, TELEPORT: 10,
-            TREES: 20, ROCKS: 12,
-            RED_SPEED: 0.08, RED_BASE_HP: 3, RED_HP_INC: 1,
-            RED_BASE_SPAWN: 3, RED_SPAWN_INC: 2,
-            WALL_BREAK_WOOD: 5, WALL_BREAK_STONE: 15,
-            SHIELD_TIME: 5, TOWER_CD: 1.0, MOVE_TIME: 0.15
+        const C={
+            SX:25,SY:18,CL:32,DAY:60,NIGHT:30,
+            SW:5,SS:3,SCR:3,WWC:3,SWC:5,WTC:8,STC:12,
+            TLC:8,TTC:5,TFC:7,TPC:10,TSC:20,RSC:12,
+            RSM:0.08,RBH:3,RHI:1,RSB:3,RSIE:2,
+            WWBT:5,SWBT:15,SD:5,TCD:1.0,MD:0.15
         };
         
         // ==================== CANVAS ====================
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        function resize() {
-            const mw = Math.min(innerWidth-20, 1000), mh = Math.min(innerHeight-20, 700);
-            const r = CFG.SIZE_X / CFG.SIZE_Y;
-            let w, h;
-            if (mw/mh > r) { h = mh; w = h*r; }
-            else { w = mw; h = w/r; }
-            CFG.CELL = Math.max(Math.floor(w / CFG.SIZE_X), 20);
-            canvas.width = CFG.CELL * CFG.SIZE_X;
-            canvas.height = CFG.CELL * CFG.SIZE_Y + 70;
+        const cv=document.getElementById('gameCanvas'),cx=cv.getContext('2d');
+        function rs(){
+            const mw=Math.min(innerWidth-20,1000),mh=Math.min(innerHeight-20,700);
+            const r=C.SX/C.SY;let w,h;
+            mw/mh>r?(h=mh,w=h*r):(w=mw,h=w/r);
+            C.CL=Math.max(Math.floor(w/C.SX),20);
+            cv.width=C.CL*C.SX;cv.height=C.CL*C.SY+70;
         }
-        addEventListener('resize', resize);
-        resize();
+        addEventListener('resize',rs);rs();
         
         // ==================== GAME STATE ====================
-        const G = {
-            walls: new Map(), blue: [], red: [], res: [],
-            towers: [], traps: [], totems: [], teles: [], bullets: [],
-            wood: CFG.START_WOOD, stone: CFG.START_STONE, cry: CFG.START_CRYSTALS,
-            phase: 'menu', night: 1, time: CFG.DAY,
-            build: null, near: null, msg: '', msgT: 0,
-            wAtk: new Map(), rMov: new Map(),
-            bMov: false, bSX: 0, bSY: 0, bTX: 0, bTY: 0, bST: 0,
-            score: 0, best: +localStorage.getItem('cs_best')||0
+        const G={
+            wls:new Map(),bl:[],rd:[],rs:[],tw:[],tr:[],tt:[],tl:[],blt:[],
+            wd:C.SW,sn:C.SS,cr:C.SCR,ph:'menu',nt:1,tm:C.DAY,
+            bld:null,nr:null,msg:'',msgT:0,wAt:new Map(),rMv:new Map(),
+            bMv:!1,bSX:0,bSY:0,bTX:0,bTY:0,bST:0,sc:0,bs:+localStorage.getItem('cs_best')||0,
+            lastTimerUpdate:Date.now()
         };
         
         // ==================== HELPERS ====================
-        const free = (x,y) => {
-            const k = `${x},${y}`;
-            return !G.walls.has(k) && !G.towers.some(t=>t.x==x&&t.y==y) && 
-                   !G.traps.some(t=>t.x==x&&t.y==y) && !G.totems.some(t=>t.x==x&&t.y==y) && 
-                   !G.teles.some(t=>t.x==x&&t.y==y);
-        };
-        const msg = (t,d=2) => { G.msg=t; G.msgT=Date.now()+d*1000; };
-        const rhp = n => CFG.RED_BASE_HP + (n-1)*CFG.RED_HP_INC;
-        const rcnt = n => CFG.RED_BASE_SPAWN + Math.floor((n-1)/CFG.RED_SPAWN_INC);
-        const wk = (x,y) => `${x},${y}`;
+        const fr=(x,y)=>{const k=`${x},${y}`;return!G.wls.has(k)&&!G.tw.some(t=>t.x==x&&t.y==y)&&!G.tr.some(t=>t.x==x&&t.y==y)&&!G.tt.some(t=>t.x==x&&t.y==y)&&!G.tl.some(t=>t.x==x&&t.y==y)};
+        const ms=(t,d=2)=>{G.msg=t;G.msgT=Date.now()+d*1000};
+        const rhp=n=>C.RBH+(n-1)*C.RHI;
+        const rcn=n=>C.RSB+Math.floor((n-1)/C.RSIE);
+        const wk=(x,y)=>`${x},${y}`;
         
-        // ==================== WORLD GEN ====================
-        function genRes() {
-            G.res = [];
-            for(let i=0;i<CFG.TREES;i++) for(let a=0;a<100;a++) {
-                const x=1+Math.random()*(CFG.SIZE_X-2)|0, y=1+Math.random()*(CFG.SIZE_Y-2)|0;
-                if(free(x,y)&&!G.res.some(r=>r.x==x&&r.y==y)){G.res.push({x,y,t:'tree'});break;}
-            }
-            for(let i=0;i<CFG.ROCKS;i++) for(let a=0;a<100;a++) {
-                const x=1+Math.random()*(CFG.SIZE_X-2)|0, y=1+Math.random()*(CFG.SIZE_Y-2)|0;
-                if(free(x,y)&&!G.res.some(r=>r.x==x&&r.y==y)){G.res.push({x,y,t:'rock'});break;}
-            }
-            for(let i=0;i<5;i++) for(let a=0;a<100;a++) {
-                const x=1+Math.random()*(CFG.SIZE_X-2)|0, y=1+Math.random()*(CFG.SIZE_Y-2)|0;
-                if(free(x,y)&&!G.res.some(r=>r.x==x&&r.y==y)){
-                    G.res.push({x,y,t:['crystal','shield','speed'][Math.random()*3|0]});break;
+        // ==================== TIMER ====================
+        function updateTimer() {
+            const now = Date.now();
+            const delta = (now - G.lastTimerUpdate) / 1000; // в секундах
+            G.lastTimerUpdate = now;
+            
+            if (G.ph === 'day' || G.ph === 'night') {
+                G.tm -= delta;
+                if (G.tm <= 0) {
+                    G.tm = 0; // предотвращаем отрицательные значения
+                    chPh();
                 }
             }
         }
         
-        function genInit() {
-            G.walls.clear(); G.blue=[]; G.red=[]; G.res=[];
-            G.towers=[]; G.traps=[]; G.totems=[]; G.teles=[]; G.bullets=[];
-            G.wAtk.clear(); G.rMov.clear();
-            for(let i=0;i<CFG.SIZE_X;i++) {
-                G.walls.set(wk(i,0),{hp:999,mhp:999,t:'border'});
-                G.walls.set(wk(i,CFG.SIZE_Y-1),{hp:999,mhp:999,t:'border'});
-            }
-            for(let i=0;i<CFG.SIZE_Y;i++) {
-                G.walls.set(wk(0,i),{hp:999,mhp:999,t:'border'});
-                G.walls.set(wk(CFG.SIZE_X-1,i),{hp:999,mhp:999,t:'border'});
-            }
-            while(true){
-                const x=5+Math.random()*(CFG.SIZE_X-10)|0, y=3+Math.random()*(CFG.SIZE_Y-6)|0;
-                if(!G.walls.has(wk(x,y))){G.blue.push({x,y,sh:false,sr:true});break;}
-            }
-            G.wood=CFG.START_WOOD; G.stone=CFG.START_STONE; G.cry=CFG.START_CRYSTALS;
-            genRes();
+        // ==================== WORLD GEN ====================
+        function gW(){
+            G.rs=[];
+            for(let i=0;i<C.TSC;i++)for(let a=0;a<100;a++){const x=1+Math.random()*(C.SX-2)|0,y=1+Math.random()*(C.SY-2)|0;if(fr(x,y)&&!G.rs.some(r=>r.x==x&&r.y==y)){G.rs.push({x,y,t:'tree'});break}}
+            for(let i=0;i<C.RSC;i++)for(let a=0;a<100;a++){const x=1+Math.random()*(C.SX-2)|0,y=1+Math.random()*(C.SY-2)|0;if(fr(x,y)&&!G.rs.some(r=>r.x==x&&r.y==y)){G.rs.push({x,y,t:'rock'});break}}
+            for(let i=0;i<5;i++)for(let a=0;a<100;a++){const x=1+Math.random()*(C.SX-2)|0,y=1+Math.random()*(C.SY-2)|0;if(fr(x,y)&&!G.rs.some(r=>r.x==x&&r.y==y)){G.rs.push({x,y,t:['crystal','shield','speed'][Math.random()*3|0]});break}}
         }
         
-        function spawnRed() {
-            G.red=[];
-            const c=rcnt(G.night), hp=rhp(G.night);
-            for(let i=0;i<c;i++) while(true){
-                const s=['t','b','l','r'][Math.random()*4|0];
-                let x,y;
-                if(s=='t'){x=1+Math.random()*(CFG.SIZE_X-2)|0;y=1;}
-                else if(s=='b'){x=1+Math.random()*(CFG.SIZE_X-2)|0;y=CFG.SIZE_Y-2;}
-                else if(s=='l'){x=1;y=1+Math.random()*(CFG.SIZE_Y-2)|0;}
-                else{x=CFG.SIZE_X-2;y=1+Math.random()*(CFG.SIZE_Y-2)|0;}
-                if(!G.walls.has(wk(x,y))){G.red.push({x,y,hp});break;}
-            }
+        function gI(){
+            G.wls.clear();G.bl=[];G.rd=[];G.rs=[];G.tw=[];G.tr=[];G.tt=[];G.tl=[];G.blt=[];G.wAt.clear();G.rMv.clear();
+            for(let i=0;i<C.SX;i++){G.wls.set(wk(i,0),{hp:999,mhp:999,t:'border'});G.wls.set(wk(i,C.SY-1),{hp:999,mhp:999,t:'border'})}
+            for(let i=0;i<C.SY;i++){G.wls.set(wk(0,i),{hp:999,mhp:999,t:'border'});G.wls.set(wk(C.SX-1,i),{hp:999,mhp:999,t:'border'})}
+            while(!0){const x=5+Math.random()*(C.SX-10)|0,y=3+Math.random()*(C.SY-6)|0;if(!G.wls.has(wk(x,y))){G.bl.push({x,y,sh:!1,sr:!0});break}}
+            G.wd=C.SW;G.sn=C.SS;G.cr=C.SCR;gW();
+        }
+        
+        function sR(){
+            G.rd=[];const c=rcn(G.nt),hp=rhp(G.nt);
+            for(let i=0;i<c;i++)while(!0){const s=['t','b','l','r'][Math.random()*4|0];let x,y;
+                s=='t'?(x=1+Math.random()*(C.SX-2)|0,y=1):s=='b'?(x=1+Math.random()*(C.SX-2)|0,y=C.SY-2):s=='l'?(x=1,y=1+Math.random()*(C.SY-2)|0):(x=C.SX-2,y=1+Math.random()*(C.SY-2)|0);
+                if(!G.wls.has(wk(x,y))){G.rd.push({x,y,hp});break}}
         }
         
         // ==================== BFS ====================
         function bfs(s,t){
-            const q=[s], cf=new Map();
-            cf.set(`${s.x},${s.y}`,null);
-            while(q.length){
-                const c=q.shift();
-                if(c.x==t.x&&c.y==t.y) break;
-                for(const d of[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]){
-                    const nx=c.x+d.x, ny=c.y+d.y, nk=`${nx},${ny}`;
-                    if(nx<0||nx>=CFG.SIZE_X||ny<0||ny>=CFG.SIZE_Y||G.walls.has(nk)||cf.has(nk)) continue;
-                    cf.set(nk,`${c.x},${c.y}`); q.push({x:nx,y:ny});
-                }
-            }
-            const tk=`${t.x},${t.y}`;
-            if(!cf.has(tk)) return null;
-            const p=[]; let ck=tk;
-            while(ck!==`${s.x},${s.y}`){const[x,y]=ck.split(',').map(Number);p.unshift({x,y});ck=cf.get(ck);}
-            return p;
+            const q=[s],cf=new Map();cf.set(`${s.x},${s.y}`,null);
+            while(q.length){const c=q.shift();if(c.x==t.x&&c.y==t.y)break;
+                for(const d of[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]){const nx=c.x+d.x,ny=c.y+d.y,nk=`${nx},${ny}`;
+                    if(nx<0||nx>=C.SX||ny<0||ny>=C.SY||G.wls.has(nk)||cf.has(nk))continue;cf.set(nk,`${c.x},${c.y}`);q.push({x:nx,y:ny})}}
+            const tk=`${t.x},${t.y}`;if(!cf.has(tk))return null;const p=[];let ck=tk;
+            while(ck!==`${s.x},${s.y}`){const[x,y]=ck.split(',').map(Number);p.unshift({x,y});ck=cf.get(ck)}return p;
         }
         
         // ==================== MOVEMENT ====================
-        function moveB(dx,dy){
-            if(G.phase!='day'&&G.phase!='night'||!G.blue.length||G.bMov) return;
-            const b=G.blue[0], nx=Math.round(b.x)+dx, ny=Math.round(b.y)+dy;
-            if(!free(nx,ny)) return;
-            G.bMov=true; G.bSX=Math.round(b.x); G.bSY=Math.round(b.y);
-            G.bTX=nx; G.bTY=ny; G.bST=Date.now()/1000;
+        function mB(dx,dy){
+            if(G.ph!='day'&&G.ph!='night'||!G.bl.length||G.bMv)return;
+            const b=G.bl[0],nx=Math.round(b.x)+dx,ny=Math.round(b.y)+dy;
+            if(!fr(nx,ny))return;
+            G.bMv=!0;G.bSX=Math.round(b.x);G.bSY=Math.round(b.y);G.bTX=nx;G.bTY=ny;G.bST=Date.now()/1000;
         }
         
-        function updB(){
-            if(!G.bMov) return;
-            const t=Date.now()/1000-G.bST;
-            if(t>=CFG.MOVE_TIME){
-                G.blue[0].x=G.bTX; G.blue[0].y=G.bTY; G.bMov=false;
-                for(const tel of G.teles){
-                    if(Math.round(G.blue[0].x)==tel.x&&Math.round(G.blue[0].y)==tel.y){
-                        for(let a=0;a<50;a++){
-                            const nx=1+Math.random()*(CFG.SIZE_X-2)|0, ny=1+Math.random()*(CFG.SIZE_Y-2)|0;
-                            if(free(nx,ny)&&(nx!=tel.x||ny!=tel.y)){G.blue[0].x=nx;G.blue[0].y=ny;msg('🌀 Телепорт!');break;}
-                        }
-                        break;
-                    }
-                }
-                chkNear();
-            }else{
-                const p=t/CFG.MOVE_TIME;
-                G.blue[0].x=G.bSX+(G.bTX-G.bSX)*p;
-                G.blue[0].y=G.bSY+(G.bTY-G.bSY)*p;
-            }
+        function uB(){
+            if(!G.bMv)return;const t=Date.now()/1000-G.bST;
+            if(t>=C.MD){G.bl[0].x=G.bTX;G.bl[0].y=G.bTY;G.bMv=!1;
+                for(const tl of G.tl){if(Math.round(G.bl[0].x)==tl.x&&Math.round(G.bl[0].y)==tl.y){for(let a=0;a<50;a++){const nx=1+Math.random()*(C.SX-2)|0,ny=1+Math.random()*(C.SY-2)|0;if(fr(nx,ny)&&(nx!=tl.x||ny!=tl.y)){G.bl[0].x=nx;G.bl[0].y=ny;ms('🌀 Телепорт!');break}}break}}cN();}
+            else{const p=t/C.MD;G.bl[0].x=G.bSX+(G.bTX-G.bSX)*p;G.bl[0].y=G.bSY+(G.bTY-G.bSY)*p;}
         }
         
-        function moveR(i,tx,ty){
-            if(i>=G.red.length) return;
-            G.rMov.set(i,{sx:G.red[i].x,sy:G.red[i].y,tx,ty,st:Date.now()/1000});
-        }
+        function mR(i,tx,ty){if(i>=G.rd.length)return;G.rMv.set(i,{sx:G.rd[i].x,sy:G.rd[i].y,tx,ty,st:Date.now()/1000})}
         
-        function updR(){
-            const n=Date.now()/1000;
-            for(const[i,m]of G.rMov){
-                if(i>=G.red.length){G.rMov.delete(i);continue;}
-                const e=n-m.st;
-                if(e>=CFG.MOVE_TIME){G.red[i].x=m.tx;G.red[i].y=m.ty;G.rMov.delete(i);}
-                else{const p=e/CFG.MOVE_TIME;G.red[i].x=m.sx+(m.tx-m.sx)*p;G.red[i].y=m.sy+(m.ty-m.sy)*p;}
-            }
-        }
+        function uR(){const n=Date.now()/1000;for(const[i,m]of G.rMv){if(i>=G.rd.length){G.rMv.delete(i);continue}const e=n-m.st;e>=C.MD?(G.rd[i].x=m.tx,G.rd[i].y=m.ty,G.rMv.delete(i)):(G.rd[i].x=m.sx+(m.tx-m.sx)*e/C.MD,G.rd[i].y=m.sy+(m.ty-m.sy)*e/C.MD)}}
         
         // ==================== COMBAT ====================
-        function twrAtk(){
-            if(G.phase!='night') return;
-            const n=Date.now()/1000;
-            for(const t of G.towers){
-                if(n-t.ls<CFG.TOWER_CD) continue;
-                let cr=null, cd=t.r+1;
-                for(const r of G.red){
-                    if(r.hp<=0) continue;
-                    const d=Math.abs(t.x-Math.round(r.x))+Math.abs(t.y-Math.round(r.y));
-                    if(d<=t.r&&d<cd){cd=d;cr=r;}
-                }
-                if(cr){t.ls=n;G.bullets.push({x:t.x,y:t.y,tx:Math.round(cr.x),ty:Math.round(cr.y),dmg:t.dmg,st:n,tr:cr});}
-            }
+        function tA(){
+            if(G.ph!='night')return;const n=Date.now()/1000;
+            for(const t of G.tw){if(n-t.ls<C.TCD)continue;let cr=null,cd=t.r+1;
+                for(const r of G.rd){if(r.hp<=0)continue;const d=Math.abs(t.x-Math.round(r.x))+Math.abs(t.y-Math.round(r.y));if(d<=t.r&&d<cd){cd=d;cr=r}}
+                if(cr){t.ls=n;G.blt.push({x:t.x,y:t.y,tx:Math.round(cr.x),ty:Math.round(cr.y),dmg:t.dmg,st:n,tr:cr})}}
         }
         
-        function updBul(){
-            if(G.phase!='night') return;
-            const n=Date.now()/1000;
-            for(let i=G.bullets.length-1;i>=0;i--){
-                const b=G.bullets[i], p=Math.min(1,(n-b.st)/0.3);
-                b.cx=b.x+(b.tx-b.x)*p; b.cy=b.y+(b.ty-b.y)*p;
-                if(p>=1){
-                    if(b.tr.hp>0){b.tr.hp-=b.dmg;if(b.tr.hp<=0){const j=G.red.indexOf(b.tr);if(j!=-1)G.red.splice(j,1);msg('💀 Убит!');}}
-                    G.bullets.splice(i,1);
-                }
-            }
+        function uBl(){
+            if(G.ph!='night')return;const n=Date.now()/1000;
+            for(let i=G.blt.length-1;i>=0;i--){const b=G.blt[i],p=Math.min(1,(n-b.st)/0.3);b.cx=b.x+(b.tx-b.x)*p;b.cy=b.y+(b.ty-b.y)*p;
+                if(p>=1){if(b.tr.hp>0){b.tr.hp-=b.dmg;if(b.tr.hp<=0){const j=G.rd.indexOf(b.tr);if(j!=-1)G.rd.splice(j,1);ms('💀 Убит!')}}G.blt.splice(i,1)}}
         }
         
-        function movRed(){
-            if(G.phase!='night') return;
-            for(let i=G.red.length-1;i>=0;i--){
-                const r=G.red[i]; if(r.hp<=0) continue;
-                if(!G.blue.length){G.phase='game_over';msg('💀 Поражение!',3);return;}
-                const b=G.blue[0], bp={x:Math.round(b.x),y:Math.round(b.y)}, rp={x:Math.round(r.x),y:Math.round(r.y)};
-                if(rp.x==bp.x&&rp.y==bp.y){
-                    if(b.sh&&!b.sr){b.sh=false;b.sr=false;msg('🛡️ Щит!');
-                        for(const d of[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]){
-                            const nx=rp.x+d.x,ny=rp.y+d.y;
-                            if(nx>=0&&nx<CFG.SIZE_X&&ny>=0&&ny<CFG.SIZE_Y&&!G.walls.has(wk(nx,ny))){moveR(i,nx,ny);break;}
-                        }
-                    }else{G.phase='game_over';msg('💀 Конец!',3);return;}
-                }
+        function mvR(){
+            if(G.ph!='night')return;
+            for(let i=G.rd.length-1;i>=0;i--){const r=G.rd[i];if(r.hp<=0)continue;
+                if(!G.bl.length){G.ph='game_over';ms('💀 Поражение!',3);return}
+                const b=G.bl[0],bp={x:Math.round(b.x),y:Math.round(b.y)},rp={x:Math.round(r.x),y:Math.round(r.y)};
+                if(rp.x==bp.x&&rp.y==bp.y){if(b.sh&&!b.sr){b.sh=!1;b.sr=!1;ms('🛡️ Щит!');for(const d of[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]){const nx=rp.x+d.x,ny=rp.y+d.y;if(nx>=0&&nx<C.SX&&ny>=0&&ny<C.SY&&!G.wls.has(wk(nx,ny))){mR(i,nx,ny);break}}}else{G.ph='game_over';ms('💀 Конец!',3);return}}
                 const rk=wk(rp.x,rp.y);
-                if(G.walls.has(rk)&&G.walls.get(rk).hp<999){if(!G.wAtk.has(rk)){G.wAtk.set(rk,0);}continue;}
-                if(G.wAtk.has(rk)) G.wAtk.delete(rk);
+                if(G.wls.has(rk)&&G.wls.get(rk).hp<999){if(!G.wAt.has(rk)){G.wAt.set(rk,0);ms('👹 Красный ломает стену!')}continue}
+                if(G.wAt.has(rk))G.wAt.delete(rk);
                 const p=bfs(rp,bp);
-                if(p&&p.length&&Math.random()<CFG.RED_SPEED) moveR(i,p[0].x,p[0].y);
-            }
-        }
-        
-        function updWall(){
-            if(G.phase!='night') return;
-            for(const[k,p]of G.wAtk){
-                if(!G.walls.has(k)){G.wAtk.delete(k);continue;}
-                const w=G.walls.get(k); if(w.hp==999){G.wAtk.delete(k);continue;}
-                const[wx,wy]=k.split(',').map(Number);
-                let on=false;
-                for(const r of G.red) if(r.hp>0&&Math.round(r.x)==wx&&Math.round(r.y)==wy){on=true;break;}
-                if(on){
-                    const bt=w.t=='wood_wall'?CFG.WALL_BREAK_WOOD:CFG.WALL_BREAK_STONE, np=p+1/60;
-                    if(np>=bt){G.towers=G.towers.filter(t=>t.x!=wx||t.y!=wy);G.walls.delete(k);G.wAtk.delete(k);msg('💥 Стена!');}
-                    else G.wAtk.set(k,np);
+                if(p&&p.length&&Math.random()<C.RSM)mR(i,p[0].x,p[0].y);
+                else{let nw=null,md=1e9;
+                    for(const[k,w]of G.wls){if(w.t=='border'||w.hp<=0)continue;const[wx,wy]=k.split(',').map(Number),d=Math.abs(wx-rp.x)+Math.abs(wy-rp.y);if(d<md){md=d;nw={x:wx,y:wy}}}
+                    if(nw&&Math.random()<C.RSM){let dx=0,dy=0;nw.x>rp.x?dx=1:nw.x<rp.x?dx=-1:nw.y>rp.y?dy=1:dy=-1;
+                        const nx=rp.x+dx,ny=rp.y+dy;if(nx>=0&&nx<C.SX&&ny>=0&&ny<C.SY)mR(i,nx,ny)}
                 }
             }
         }
         
-        function actTrp(){
-            if(G.phase!='night') return;
-            for(let i=G.traps.length-1;i>=0;i--){
-                const t=G.traps[i];
-                for(let j=G.red.length-1;j>=0;j--){
-                    const r=G.red[j];
-                    if(Math.round(r.x)==t.x&&Math.round(r.y)==t.y){
-                        if(t.t=='fire'){r.hp-=2;G.cry++;msg('🔥 +1💎');}
-                        else msg('⏳ Заморозка!');
-                        G.traps.splice(i,1); break;
-                    }
-                }
+        function uW(){
+            if(G.ph!='night')return;
+            const deltaTime = 1/60;
+            for(const[k,p]of G.wAt){if(!G.wls.has(k)){G.wAt.delete(k);continue}const w=G.wls.get(k);if(w.hp==999){G.wAt.delete(k);continue}
+                const[wx,wy]=k.split(',').map(Number);let on=!1;for(const r of G.rd)if(r.hp>0&&Math.round(r.x)==wx&&Math.round(r.y)==wy){on=!0;break}
+                if(on){const bt=w.t=='wood_wall'?C.WWBT:C.SWBT,np=p+deltaTime;
+                    if(np>=bt){G.tw=G.tw.filter(t=>t.x!=wx||t.y!=wy);G.wls.delete(k);G.wAt.delete(k);ms('💥 Стена разрушена!')}else G.wAt.set(k,np)}
+            }
+        }
+        
+        function aT(){
+            if(G.ph!='night')return;
+            for(let i=G.tr.length-1;i>=0;i--){const t=G.tr[i];
+                for(let j=G.rd.length-1;j>=0;j--){const r=G.rd[j];if(Math.round(r.x)==t.x&&Math.round(r.y)==t.y){
+                    if(t.t=='fire'){r.hp-=2;G.cr++;ms('🔥 +1💎')}else ms('⏳ Заморозка!');G.tr.splice(i,1);break}}
             }
         }
         
         // ==================== INTERACTION ====================
-        function chkNear(){
-            if(!G.blue.length){G.near=null;return;}
-            const bx=Math.round(G.blue[0].x), by=Math.round(G.blue[0].y);
-            for(const r of G.res) if(Math.abs(r.x-bx)+Math.abs(r.y-by)<=1){G.near={t:'res',d:r};return;}
-            for(const[k,w]of G.walls){
-                if(w.t=='border') continue;
-                const[wx,wy]=k.split(',').map(Number);
-                if(Math.abs(wx-bx)+Math.abs(wy-by)<=1){G.near={t:'wall',x:wx,y:wy,wt:w.t};return;}
-            }
-            for(let i=0;i<G.towers.length;i++){const t=G.towers[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'tower',i};return;}}
-            for(let i=0;i<G.traps.length;i++){const t=G.traps[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'trap',i};return;}}
-            for(let i=0;i<G.totems.length;i++){const t=G.totems[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'totem',i};return;}}
-            for(let i=0;i<G.teles.length;i++){const t=G.teles[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.near={t:'tele',i};return;}}
-            G.near=null;
+        function cN(){
+            if(!G.bl.length){G.nr=null;return}const bx=Math.round(G.bl[0].x),by=Math.round(G.bl[0].y);
+            for(const r of G.rs)if(Math.abs(r.x-bx)+Math.abs(r.y-by)<=1){G.nr={t:'rs',d:r};return}
+            for(const[k,w]of G.wls){if(w.t=='border')continue;const[wx,wy]=k.split(',').map(Number);if(Math.abs(wx-bx)+Math.abs(wy-by)<=1){G.nr={t:'wl',x:wx,y:wy,wt:w.t};return}}
+            for(let i=0;i<G.tw.length;i++){const t=G.tw[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.nr={t:'tw',i};return}}
+            for(let i=0;i<G.tr.length;i++){const t=G.tr[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.nr={t:'tr',i};return}}
+            for(let i=0;i<G.tt.length;i++){const t=G.tt[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.nr={t:'tt',i};return}}
+            for(let i=0;i<G.tl.length;i++){const t=G.tl[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){G.nr={t:'tl',i};return}}
+            G.nr=null;
         }
         
-        function collect(){
-            if(!G.blue.length||G.phase!='day'){msg('❌ Только днём!');return;}
-            chkNear();
-            if(!G.near){msg('❌ Ничего рядом');return;}
-            const o=G.near;
-            if(o.t=='res'){
-                const r=o.d;
-                if(r.t=='tree'){G.wood++;msg('🌲 +1');}
-                else if(r.t=='rock'){G.stone++;msg('🪨 +1');}
-                else if(r.t=='crystal'){G.cry++;msg('✨ +1');}
-                else if(r.t=='shield'){G.blue[0].sh=true;G.blue[0].sr=true;msg('🛡️ Щит!');}
-                G.res=G.res.filter(x=>!(x.x==r.x&&x.y==r.y));
-            }else if(o.t=='wall'){if(o.wt=='wood_wall')G.wood++;else G.stone++;G.wAtk.delete(wk(o.x,o.y));G.walls.delete(wk(o.x,o.y));msg('🧱 Демонт.');}
-            else if(o.t=='tower'){const t=G.towers[o.i];if(t.t=='wood')G.wood+=2;else G.stone+=2;G.towers.splice(o.i,1);msg('🗼 Демонт.');}
-            else if(o.t=='trap'){G.cry++;G.traps.splice(o.i,1);msg('⚡ +1💎');}
-            else if(o.t=='totem'){G.cry+=2;G.totems.splice(o.i,1);msg('✨ +2💎');}
-            else if(o.t=='tele'){G.cry+=3;G.teles.splice(o.i,1);msg('🌀 +3💎');}
-            G.near=null;
+        function cl(){
+            if(!G.bl.length||G.ph!='day'){ms('❌ Только днём!');return}cN();
+            if(!G.nr){ms('❌ Ничего рядом');return}const o=G.nr;
+            if(o.t=='rs'){const r=o.d;
+                if(r.t=='tree'){G.wd++;ms('🌲 +1')}else if(r.t=='rock'){G.sn++;ms('🪨 +1')}else if(r.t=='crystal'){G.cr++;ms('✨ +1')}else if(r.t=='shield'){G.bl[0].sh=!0;G.bl[0].sr=!0;ms('🛡️ Щит!')}
+                G.rs=G.rs.filter(x=>!(x.x==r.x&&x.y==r.y))}
+            else if(o.t=='wl'){if(o.wt=='wood_wall')G.wd++;else G.sn++;G.wAt.delete(wk(o.x,o.y));G.wls.delete(wk(o.x,o.y));ms('🧱 Демонт.')}
+            else if(o.t=='tw'){const t=G.tw[o.i];if(t.t=='wood')G.wd+=2;else G.sn+=2;G.tw.splice(o.i,1);ms('🗼 Демонт.')}
+            else if(o.t=='tr'){G.cr++;G.tr.splice(o.i,1);ms('⚡ +1💎')}
+            else if(o.t=='tt'){G.cr+=2;G.tt.splice(o.i,1);ms('✨ +2💎')}
+            else if(o.t=='tl'){G.cr+=3;G.tl.splice(o.i,1);ms('🌀 +3💎')}
+            G.nr=null;
         }
         
-        function shield(){
-            if(!G.blue.length||G.phase!='day'){msg('❌ Только днём!');return;}
-            const b=G.blue[0];
-            if(b.sh&&b.sr){b.sr=false;msg('🛡️ Щит!');setTimeout(()=>{b.sh=false;},CFG.SHIELD_TIME*1000);}
-            else msg('❌ Нет щита');
+        function shld(){
+            if(!G.bl.length||G.ph!='day'){ms('❌ Только днём!');return}const b=G.bl[0];
+            if(b.sh&&b.sr){b.sr=!1;ms('🛡️ Щит активен!');setTimeout(()=>{b.sh=!1},C.SD*1000)}else ms('❌ Нет щита');
         }
         
-        function build(x,y,t){
-            if(!free(x,y)){msg('❌ Занято!');return false;}
-            const costs={wood_wall:{r:'wood',a:CFG.WOOD_WALL},stone_wall:{r:'stone',a:CFG.STONE_WALL},wood_tower:{r:'wood',a:CFG.WOOD_TOWER},stone_tower:{r:'stone',a:CFG.STONE_TOWER},totem_light:{r:'cry',a:CFG.TOTEM},time_trap:{r:'cry',a:CFG.TRAP_TIME},fire_trap:{r:'cry',a:CFG.TRAP_FIRE},teleport:{r:'cry',a:CFG.TELEPORT}};
-            const c=costs[t]; if(!c) return false;
-            let ok=(c.r=='wood'?G.wood:c.r=='stone'?G.stone:G.cry)>=c.a;
-            if(!ok){msg('❌ Не хватает!');return false;}
-            if(c.r=='wood')G.wood-=c.a;else if(c.r=='stone')G.stone-=c.a;else G.cry-=c.a;
-            if(t=='wood_wall'){G.walls.set(wk(x,y),{hp:CFG.WALL_BREAK_WOOD,mhp:CFG.WALL_BREAK_WOOD,t:'wood_wall'});}
-            else if(t=='stone_wall'){G.walls.set(wk(x,y),{hp:CFG.WALL_BREAK_STONE,mhp:CFG.WALL_BREAK_STONE,t:'stone_wall'});}
-            else if(t=='wood_tower'){G.towers.push({x,y,t:'wood',dmg:.5,r:4,ls:0});}
-            else if(t=='stone_tower'){G.towers.push({x,y,t:'stone',dmg:1,r:5,ls:0});}
-            else if(t=='totem_light'){G.totems.push({x,y,t:'light',r:4});}
-            else if(t=='time_trap'){G.traps.push({x,y,t:'time'});}
-            else if(t=='fire_trap'){G.traps.push({x,y,t:'fire'});}
-            else if(t=='teleport'){G.teles.push({x,y});}
-            msg('✅ Построено!'); return true;
+        function bld(x,y,t){
+            if(!fr(x,y)){ms('❌ Занято!');return!1}
+            const csts={wood_wall:{r:'wd',a:C.WWC},stone_wall:{r:'sn',a:C.SWC},wood_tower:{r:'wd',a:C.WTC},stone_tower:{r:'sn',a:C.STC},totem_light:{r:'cr',a:C.TLC},time_trap:{r:'cr',a:C.TTC},fire_trap:{r:'cr',a:C.TFC},teleport:{r:'cr',a:C.TPC}};
+            const c=csts[t];if(!c)return!1;
+            let ok=(c.r=='wd'?G.wd:c.r=='sn'?G.sn:G.cr)>=c.a;
+            if(!ok){ms('❌ Не хватает!');return!1}
+            if(c.r=='wd')G.wd-=c.a;else if(c.r=='sn')G.sn-=c.a;else G.cr-=c.a;
+            if(t=='wood_wall')G.wls.set(wk(x,y),{hp:C.WWBT,mhp:C.WWBT,t:'wood_wall'});
+            else if(t=='stone_wall')G.wls.set(wk(x,y),{hp:C.SWBT,mhp:C.SWBT,t:'stone_wall'});
+            else if(t=='wood_tower')G.tw.push({x,y,t:'wood',dmg:.5,r:4,ls:0});
+            else if(t=='stone_tower')G.tw.push({x,y,t:'stone',dmg:1,r:5,ls:0});
+            else if(t=='totem_light')G.tt.push({x,y,t:'light',r:4});
+            else if(t=='time_trap')G.tr.push({x,y,t:'time'});
+            else if(t=='fire_trap')G.tr.push({x,y,t:'fire'});
+            else if(t=='teleport')G.tl.push({x,y});
+            ms('✅ Построено!');return!0;
         }
         
         // ==================== PHASES ====================
-        function chkNEnd(){if(G.phase=='night'&&!G.red.length){msg('🌞 Рассвет!',2);G.time=0;}}
+        function cNE(){if(G.ph=='night'&&!G.rd.length){ms('🌞 Рассвет!',2);G.tm=0}}
         
-        function chgPhase(){
-            if(G.phase=='day'){
-                G.phase='night'; G.time=CFG.NIGHT; G.bullets=[]; G.rMov.clear(); G.bMov=false;
-                if(G.blue.length){G.blue[0].x=Math.round(G.blue[0].x);G.blue[0].y=Math.round(G.blue[0].y);}
-                spawnRed(); msg(`🌙 Ночь ${G.night}!`,3);
-            }else{
-                G.phase='day'; G.night++; G.time=CFG.DAY; G.score=G.night-1;
-                if(G.score>G.best){G.best=G.score;localStorage.setItem('cs_best',G.best);}
-                G.red=[]; G.bullets=[]; G.rMov.clear();
-                if(G.blue.length){G.blue[0].x=Math.round(G.blue[0].x);G.blue[0].y=Math.round(G.blue[0].y);}
-                genRes(); msg(`🌞 День ${G.night}!`,3);
-            }
+        function skipToNight(){
+            if(G.ph=='day'){G.tm=0;ms('🌙 Пропуск дня!');chPh()}
         }
         
-        function startGame(){
-            G.phase='day'; G.night=1; G.time=CFG.DAY;
-            G.wood=CFG.START_WOOD; G.stone=CFG.START_STONE; G.cry=CFG.START_CRYSTALS;
-            G.build=null; G.bMov=false; G.rMov.clear(); G.score=0;
-            genInit(); chkNear(); msg('🎮 Игра началась!',3);
+        function chPh(){
+            if(G.ph=='day'){G.ph='night';G.tm=C.NIGHT;G.blt=[];G.rMv.clear();G.bMv=!1;
+                if(G.bl.length){G.bl[0].x=Math.round(G.bl[0].x);G.bl[0].y=Math.round(G.bl[0].y)}sR();
+                document.getElementById('skipNight').style.display='none';
+                ms(`🌙 Ночь ${G.nt}!`,3)}
+            else{G.ph='day';G.nt++;G.tm=C.DAY;G.sc=G.nt-1;
+                if(G.sc>G.bs){G.bs=G.sc;localStorage.setItem('cs_best',G.bs)}
+                G.rd=[];G.blt=[];G.rMv.clear();if(G.bl.length){G.bl[0].x=Math.round(G.bl[0].x);G.bl[0].y=Math.round(G.bl[0].y)}
+                gW();document.getElementById('skipNight').style.display='block';ms(`🌞 День ${G.nt}!`,3)}
+            G.lastTimerUpdate = Date.now(); // Сброс таймера при смене фазы
+        }
+        
+        function stG(){
+            G.ph='day';G.nt=1;G.tm=C.DAY;G.wd=C.SW;G.sn=C.SS;G.cr=C.SCR;
+            G.bld=null;G.bMv=!1;G.rMv.clear();G.sc=0;
+            gI();cN();document.getElementById('skipNight').style.display='block';
+            G.lastTimerUpdate = Date.now();
+            ms('🎮 Игра началась!',3);
         }
         
         // ==================== RENDER ====================
-        const spr = (k,x,y,w,h) => { if(sprites[k]) { ctx.drawImage(sprites[k],x,y,w,h); return true; } return false; };
+        const sp=(k,x,y,w,h)=>{if(sprites[k]){cx.drawImage(sprites[k],x,y,w,h);return!0}return!1};
         
-        function draw(){
-            const C=CFG.CELL;
-            ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,0,canvas.width,canvas.height);
-            
-            if(G.phase=='menu'){drawMenu();return;}
+        function drw(){
+            const CL=C.CL;
+            cx.fillStyle='#1a1a2e';cx.fillRect(0,0,cv.width,cv.height);
+            if(G.ph=='menu'){drwM();return}
             
             // Grid
-            for(let y=0;y<CFG.SIZE_Y;y++) for(let x=0;x<CFG.SIZE_X;x++){
-                ctx.fillStyle=(x+y)%2?'#1e4a1e':'#2d5a2c'; ctx.fillRect(x*C,y*C,C,C);
-            }
+            for(let y=0;y<C.SY;y++)for(let x=0;x<C.SX;x++){cx.fillStyle=(x+y)%2?'#1e4a1e':'#2d5a2c';cx.fillRect(x*CL,y*CL,CL,CL)}
             
             // Resources
-            for(const r of G.res){
-                const rx=r.x*C, ry=r.y*C, cx=rx+C/2, cy=ry+C/2;
-                if(r.t=='tree'){if(!spr('tree',rx,ry,C,C)){ctx.fillStyle='#228B22';ctx.beginPath();ctx.arc(cx,cy,C*.35,0,6.28);ctx.fill();}}
-                else if(r.t=='rock'){if(!spr('rock',rx,ry,C,C)){ctx.fillStyle='#808080';ctx.fillRect(rx+C*.2,ry+C*.2,C*.6,C*.6);}}
-                else if(r.t=='crystal'){if(!spr('crystal',rx,ry,C,C)){ctx.fillStyle='#FF69B4';ctx.beginPath();ctx.arc(cx,cy,C*.3,0,6.28);ctx.fill();}}
-                else if(r.t=='shield'){if(!spr('shield',rx,ry,C,C)){ctx.fillStyle='#FFD700';ctx.beginPath();ctx.arc(cx,cy,C*.3,0,6.28);ctx.fill();}}
+            for(const r of G.rs){const rx=r.x*CL,ry=r.y*CL;
+                if(r.t=='tree'){if(!sp('tree',rx,ry,CL,CL)){cx.fillStyle='#228B22';cx.beginPath();cx.arc(rx+CL/2,ry+CL/2,CL*.35,0,6.28);cx.fill()}}
+                else if(r.t=='rock'){if(!sp('rock',rx,ry,CL,CL)){cx.fillStyle='#808080';cx.fillRect(rx+CL*.2,ry+CL*.2,CL*.6,CL*.6)}}
+                else if(r.t=='crystal'){if(!sp('crystal',rx,ry,CL,CL)){cx.fillStyle='#FF69B4';cx.beginPath();cx.arc(rx+CL/2,ry+CL/2,CL*.3,0,6.28);cx.fill()}}
+                else if(r.t=='shield'){if(!sp('shield',rx,ry,CL,CL)){cx.fillStyle='#FFD700';cx.beginPath();cx.arc(rx+CL/2,ry+CL/2,CL*.3,0,6.28);cx.fill()}}
             }
             
             // Walls
-            for(const[k,w]of G.walls){
-                const[x,y]=k.split(',').map(Number);
-                if(w.hp==999){ctx.fillStyle='#4a3728';ctx.fillRect(x*C,y*C,C,C);}
-                else{
-                    const sk=w.t=='wood_wall'?'wall_wood':'wall_stone';
-                    if(!spr(sk,x*C,y*C,C,C)){ctx.fillStyle=w.t=='wood_wall'?'#8B4513':'#808080';ctx.fillRect(x*C+2,y*C+2,C-4,C-4);}
-                    const p=G.wAtk.get(k)||0, bw=Math.max(0,(w.mhp-p)/w.mhp)*(C-10);
-                    ctx.fillStyle='#333';ctx.fillRect(x*C+5,y*C+C-8,C-10,5);
-                    ctx.fillStyle='#0F0';ctx.fillRect(x*C+5,y*C+C-8,bw,5);
-                }
+            for(const[k,w]of G.wls){const[x,y]=k.split(',').map(Number);
+                if(w.hp==999){cx.fillStyle='#4a3728';cx.fillRect(x*CL,y*CL,CL,CL)}
+                else{const sk=w.t=='wood_wall'?'wall_wood':'wall_stone';
+                    if(!sp(sk,x*CL,y*CL,CL,CL)){cx.fillStyle=w.t=='wood_wall'?'#8B4513':'#808080';cx.fillRect(x*CL+2,y*CL+2,CL-4,CL-4)}
+                    const p=G.wAt.get(k)||0,bw=Math.max(0,(w.mhp-p)/w.mhp)*(CL-10);
+                    cx.fillStyle='#333';cx.fillRect(x*CL+5,y*CL+CL-8,CL-10,5);
+                    cx.fillStyle='#0F0';cx.fillRect(x*CL+5,y*CL+CL-8,bw,5);
+                    if(p>0){cx.fillStyle='#FA0';cx.font=`${Math.max(8,CL*.25)}px Arial`;cx.textAlign='center';
+                        cx.fillText(`${(w.mhp-p).toFixed(1)}с`,x*CL+CL/2,y*CL-2);cx.textAlign='left'}}
             }
             
             // Towers
-            for(const t of G.towers){
-                const sk=t.t=='wood'?'tower_wood':'tower_stone';
-                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.t=='wood'?'#CD853F':'#A0A0A0';ctx.fillRect(t.x*C+C*.2,t.y*C+C*.2,C*.6,C*.6);}
-                ctx.strokeStyle='rgba(255,215,0,.2)';ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,t.r*C,0,6.28);ctx.stroke();ctx.setLineDash([]);
-            }
+            for(const t of G.tw){const sk=t.t=='wood'?'tower_wood':'tower_stone';
+                if(!sp(sk,t.x*CL,t.y*CL,CL,CL)){cx.fillStyle=t.t=='wood'?'#CD853F':'#A0A0A0';cx.fillRect(t.x*CL+CL*.2,t.y*CL+CL*.2,CL*.6,CL*.6)}
+                cx.strokeStyle='rgba(255,215,0,.2)';cx.setLineDash([5,5]);cx.beginPath();cx.arc(t.x*CL+CL/2,t.y*CL+CL/2,t.r*CL,0,6.28);cx.stroke();cx.setLineDash([])}
             
-            // Totems, Traps, Teleports
-            for(const t of G.totems) if(!spr('totem_light',t.x*C,t.y*C,C,C)){ctx.fillStyle='#08F';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.3,0,6.28);ctx.fill();}
-            for(const t of G.traps){
-                const sk=t.t=='time'?'trap_time':'trap_fire';
-                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.t=='time'?'#FA0':'#F44';ctx.fillRect(t.x*C+C*.25,t.y*C+C*.25,C*.5,C*.5);}
-            }
-            for(const t of G.teles) if(!spr('teleport',t.x*C,t.y*C,C,C)){ctx.fillStyle='#93C';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.35,0,6.28);ctx.fill();}
+            // Others
+            for(const t of G.tt)if(!sp('totem_light',t.x*CL,t.y*CL,CL,CL)){cx.fillStyle='#08F';cx.beginPath();cx.arc(t.x*CL+CL/2,t.y*CL+CL/2,CL*.3,0,6.28);cx.fill()}
+            for(const t of G.tr){const sk=t.t=='time'?'trap_time':'trap_fire';if(!sp(sk,t.x*CL,t.y*CL,CL,CL)){cx.fillStyle=t.t=='time'?'#FA0':'#F44';cx.fillRect(t.x*CL+CL*.25,t.y*CL+CL*.25,CL*.5,CL*.5)}}
+            for(const t of G.tl)if(!sp('teleport',t.x*CL,t.y*CL,CL,CL)){cx.fillStyle='#93C';cx.beginPath();cx.arc(t.x*CL+CL/2,t.y*CL+CL/2,CL*.35,0,6.28);cx.fill()}
             
             // Bullets
-            for(const b of G.bullets){
-                ctx.fillStyle='#FF0';ctx.shadowBlur=8;ctx.shadowColor='#FFD700';
-                ctx.beginPath();ctx.arc((b.cx||b.x)*C+C/2,(b.cy||b.y)*C+C/2,4,0,6.28);ctx.fill();ctx.shadowBlur=0;
-            }
+            for(const b of G.blt){cx.fillStyle='#FF0';cx.shadowBlur=8;cx.shadowColor='#FFD700';cx.beginPath();cx.arc((b.cx||b.x)*CL+CL/2,(b.cy||b.y)*CL+CL/2,4,0,6.28);cx.fill();cx.shadowBlur=0}
             
             // Blue
-            if(G.blue.length){
-                const b=G.blue[0], bx=b.x*C, by=b.y*C, sk=G.phase=='night'?'blue_scared':'blue_idle';
-                if(!spr(sk,bx,by,C,C)){
-                    ctx.fillStyle=G.phase=='night'?'#69F':'#48F';
-                    ctx.beginPath();ctx.arc(bx+C/2,by+C/2,C*.35,0,6.28);ctx.fill();
-                }
-                if(b.sh&&!b.sr){ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.beginPath();ctx.arc(bx+C/2,by+C/2,C*.45,0,6.28);ctx.stroke();}
-            }
+            if(G.bl.length){const b=G.bl[0],bx=b.x*CL,by=b.y*CL,sk=G.ph=='night'?'blue_scared':'blue_idle';
+                if(!sp(sk,bx,by,CL,CL)){cx.fillStyle=G.ph=='night'?'#69F':'#48F';cx.beginPath();cx.arc(bx+CL/2,by+CL/2,CL*.35,0,6.28);cx.fill()}
+                if(b.sh&&!b.sr){cx.strokeStyle='#FFD700';cx.lineWidth=3;cx.beginPath();cx.arc(bx+CL/2,by+CL/2,CL*.45,0,6.28);cx.stroke()}}
             
-            // Reds
-            for(const r of G.red){
-                if(r.hp<=0) continue;
-                const rx=r.x*C, ry=r.y*C, sk=G.phase=='day'?'red_sleep':'red';
-                if(!spr(sk,rx,ry,C,C)){
-                    ctx.fillStyle=G.phase=='day'?'#633':'#F33';
-                    ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.35,0,6.28);ctx.fill();
-                }
-                ctx.fillStyle='#FAA';ctx.font=`bold ${Math.max(10,C*.35)}px Arial`;ctx.textAlign='center';
-                ctx.fillText(`♥${r.hp}`,rx+C/2,ry-C*.3);ctx.textAlign='left';
-            }
+            // Reds  
+            for(const r of G.rd){if(r.hp<=0)continue;const rx=r.x*CL,ry=r.y*CL,sk=G.ph=='day'?'red_sleep':'red';
+                if(!sp(sk,rx,ry,CL,CL)){cx.fillStyle=G.ph=='day'?'#633':'#F33';cx.beginPath();cx.arc(rx+CL/2,ry+CL/2,CL*.35,0,6.28);cx.fill()}
+                cx.fillStyle='#FAA';cx.font=`bold ${Math.max(10,CL*.35)}px Arial`;cx.textAlign='center';cx.fillText(`♥${r.hp}`,rx+CL/2,ry-CL*.3);cx.textAlign='left'}
+            
+            // Nearby highlight
+            if(G.nr&&G.ph=='day'){let x,y;
+                if(G.nr.t=='rs'){x=G.nr.d.x;y=G.nr.d.y}else if(G.nr.t=='wl'){x=G.nr.x;y=G.nr.y}else if(G.nr.t=='tw'){x=G.tw[G.nr.i].x;y=G.tw[G.nr.i].y}else if(G.nr.t=='tr'){x=G.tr[G.nr.i].x;y=G.tr[G.nr.i].y}else if(G.nr.t=='tt'){x=G.tt[G.nr.i].x;y=G.tt[G.nr.i].y}else if(G.nr.t=='tl'){x=G.tl[G.nr.i].x;y=G.tl[G.nr.i].y}
+                cx.strokeStyle='#FFD700';cx.lineWidth=3;cx.strokeRect(x*CL,y*CL,CL,CL);
+                cx.fillStyle='#FFD700';cx.font='bold 12px Arial';cx.textAlign='center';cx.fillText('[E]',x*CL+CL/2,y*CL-8);cx.textAlign='left'}
             
             // Shop
-            if(G.phase=='day'){
-                const sx=canvas.width-170;
-                ctx.fillStyle='rgba(13,13,26,.95)';ctx.fillRect(sx-5,10,165,canvas.height-80);
-                ctx.strokeStyle='#FFD700';ctx.strokeRect(sx-5,10,165,canvas.height-80);
-                ctx.fillStyle='#FFD700';ctx.font='bold 11px Arial';ctx.textAlign='center';ctx.fillText('🏪 МАГАЗИН',sx+80,25);ctx.textAlign='left';
-                const items=[['Дер.стена','wood_wall',CFG.WOOD_WALL,'wood'],['Кам.стена','stone_wall',CFG.STONE_WALL,'stone'],['Дер.башня','wood_tower',CFG.WOOD_TOWER,'wood'],['Кам.башня','stone_tower',CFG.STONE_TOWER,'stone'],['Тотем','totem_light',CFG.TOTEM,'cry'],['Лов.врем','time_trap',CFG.TRAP_TIME,'cry'],['Огн.лов','fire_trap',CFG.TRAP_FIRE,'cry'],['Телепорт','teleport',CFG.TELEPORT,'cry']];
-                items.forEach(([n,t,c,r],i)=>{
-                    const y=42+i*28;
-                    if(G.build==t){ctx.fillStyle='rgba(255,215,0,.25)';ctx.fillRect(sx,y-10,155,24);}
-                    ctx.fillStyle='white';ctx.font='9px Arial';ctx.fillText(n,sx+5,y+2);
-                    ctx.fillText((r=='cry'?'💎':r=='wood'?'🪵':'🪨')+c,sx+110,y+2);
-                });
-            }
+            if(G.ph=='day'){const sx=cv.width-170;
+                cx.fillStyle='rgba(13,13,26,.95)';cx.fillRect(sx-5,10,165,cv.height-80);
+                cx.strokeStyle='#FFD700';cx.strokeRect(sx-5,10,165,cv.height-80);
+                cx.fillStyle='#FFD700';cx.font='bold 11px Arial';cx.textAlign='center';cx.fillText('🏪 МАГАЗИН',sx+80,25);cx.textAlign='left';
+                const its=[['Дер.стена','wood_wall',C.WWC,'wd'],['Кам.стена','stone_wall',C.SWC,'sn'],['Дер.башня','wood_tower',C.WTC,'wd'],['Кам.башня','stone_tower',C.STC,'sn'],['Тотем','totem_light',C.TLC,'cr'],['Лов.врем','time_trap',C.TTC,'cr'],['Огн.лов','fire_trap',C.TFC,'cr'],['Телепорт','teleport',C.TPC,'cr']];
+                its.forEach(([n,t,c,r],i)=>{const y=42+i*28;if(G.bld==t){cx.fillStyle='rgba(255,215,0,.25)';cx.fillRect(sx,y-10,155,24)}
+                    cx.fillStyle='white';cx.font='9px Arial';cx.fillText(n,sx+5,y+2);cx.fillText((r=='cr'?'💎':r=='wd'?'🪵':'🪨')+c,sx+110,y+2)})}
             
             // Game Over
-            if(G.phase=='game_over'){
-                ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(0,0,canvas.width,canvas.height);
-                ctx.fillStyle='red';ctx.font='bold 32px Arial';ctx.textAlign='center';
-                ctx.fillText('💀 ПОРАЖЕНИЕ 💀',canvas.width/2,canvas.height/2-20);
-                ctx.fillStyle='white';ctx.font='16px Arial';
-                ctx.fillText(`Ночей: ${G.score}`,canvas.width/2,canvas.height/2+20);
-                ctx.fillText('R/тап - рестарт',canvas.width/2,canvas.height/2+50);
-                ctx.textAlign='left';
-            }
+            if(G.ph=='game_over'){cx.fillStyle='rgba(0,0,0,.75)';cx.fillRect(0,0,cv.width,cv.height);
+                cx.fillStyle='red';cx.font='bold 32px Arial';cx.textAlign='center';cx.fillText('💀 ПОРАЖЕНИЕ 💀',cv.width/2,cv.height/2-20);
+                cx.fillStyle='white';cx.font='16px Arial';cx.fillText(`Ночей: ${G.sc}`,cv.width/2,cv.height/2+20);cx.fillText('R/тап - рестарт',cv.width/2,cv.height/2+50);cx.textAlign='left'}
             
-            // UI
-            drawUI();
+            drwUI();
         }
         
-        function drawUI(){
-            const uy=CFG.CELL*CFG.SIZE_Y, C=CFG.CELL;
-            ctx.fillStyle='#1a1a2e';ctx.fillRect(0,uy,canvas.width,70);
-            ctx.strokeStyle='#FFD700';ctx.strokeRect(0,uy,canvas.width,70);
+        function drwUI(){
+            const uy=C.CL*C.SY;
+            cx.fillStyle='#1a1a2e';cx.fillRect(0,uy,cv.width,70);cx.strokeStyle='#FFD700';cx.strokeRect(0,uy,cv.width,70);
+            sp(G.ph=='day'?'day':'night',10,uy+5,40,40);
+            cx.fillStyle=G.ph=='day'?'#FFD700':'#8B6CFF';cx.font='bold 14px Arial';cx.fillText(`${G.ph=='day'?'☀️':'🌙'} ${G.nt}`,55,uy+25);
+            cx.fillStyle='#F44';cx.fillText(`👹${G.rd.length}`,155,uy+25);
+            cx.fillStyle='#8B6914';cx.fillText(`🪵${G.wd}`,225,uy+25);
+            cx.fillStyle='#A0A0A0';cx.fillText(`🪨${G.sn}`,295,uy+25);
+            sp('ui_crystal',365,uy+8,24,24);cx.fillStyle='#FFD700';cx.fillText(`${G.cr}`,393,uy+25);
+            const m=Math.floor(G.tm/60),s=Math.floor(G.tm%60);
+            cx.fillStyle='#FFE66D';cx.font='bold 14px Arial';
+            cx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,cv.width-120,uy+25);
+            const mt=G.ph=='day'?C.DAY:C.NIGHT,bw=(G.tm/mt)*(cv.width-200);
+            cx.fillStyle='#333';cx.fillRect(60,uy+35,cv.width-200,8);
+            cx.fillStyle=G.ph=='day'?'#FFD700':'#8B3A3A';cx.fillRect(60,uy+35,bw,8);
+            cx.fillStyle='#FFD700';cx.font='11px Arial';cx.fillText(`🏆${G.bs}`,cv.width-140,uy+55);
             
-            spr(G.phase=='day'?'day':'night',10,uy+5,40,40);
-            ctx.fillStyle=G.phase=='day'?'#FFD700':'#8B6CFF';ctx.font='bold 14px Arial';
-            ctx.fillText(`${G.phase=='day'?'☀️':'🌙'} ${G.night}`,55,uy+25);
-            ctx.fillStyle='#F44';ctx.fillText(`👹${G.red.length}`,160,uy+25);
-            ctx.fillStyle='#8B6914';ctx.fillText(`🪵${G.wood}`,230,uy+25);
-            ctx.fillStyle='#A0A0A0';ctx.fillText(`🪨${G.stone}`,300,uy+25);
-            spr('ui_crystal',370,uy+8,24,24); ctx.fillStyle='#FFD700';ctx.fillText(`${G.cry}`,398,uy+25);
-            const m=G.time/60|0, s=G.time%60|0;
-            ctx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,canvas.width-120,uy+25);
-            const mt=G.phase=='day'?CFG.DAY:CFG.NIGHT, bw=(G.time/mt)*(canvas.width-200);
-            ctx.fillStyle='#333';ctx.fillRect(60,uy+35,canvas.width-200,8);
-            ctx.fillStyle=G.phase=='day'?'#FFD700':'#8B3A3A';ctx.fillRect(60,uy+35,bw,8);
-            ctx.fillStyle='#FFD700';ctx.font='11px Arial';ctx.fillText(`🏆${G.best}`,canvas.width-140,uy+55);
+            if(G.msg&&Date.now()<G.msgT){const my=cv.height-85;
+                cx.fillStyle='rgba(26,26,46,.9)';cx.fillRect(cv.width/2-150,my-10,300,25);
+                cx.strokeStyle='#FFD700';cx.strokeRect(cv.width/2-150,my-10,300,25);
+                cx.fillStyle='#FFD700';cx.font='bold 12px Arial';cx.textAlign='center';cx.fillText(G.msg,cv.width/2,my+7);cx.textAlign='left'}
         }
         
-        function drawMenu(){
-            const cx=canvas.width/2;
-            ctx.fillStyle='#0a0a1a';ctx.fillRect(0,0,canvas.width,canvas.height);
-            ctx.fillStyle='#FFD700';ctx.font=`bold ${Math.min(36,canvas.width/16)}px Arial`;ctx.textAlign='center';
-            ctx.fillText('🏰 CRYSTAL SURVIVORS 🏰',cx,100);
-            ctx.fillStyle='white';ctx.font=`${Math.min(16,canvas.width/35)}px Arial`;
-            ctx.fillText('Строй защиту, переживи ночи!',cx,150);
-            ctx.fillStyle='#2a2a3a';ctx.fillRect(cx-120,200,240,50);
-            ctx.strokeStyle='#FFD700';ctx.strokeRect(cx-120,200,240,50);
-            ctx.fillStyle='white';ctx.font='bold 20px Arial';ctx.fillText('▶ НАЧАТЬ ИГРУ',cx,232);
-            ctx.fillStyle='#AAA';ctx.font='13px Arial';
-            ctx.fillText('WASD/Стрелки [E]сбор [F]щит',cx,290);
-            ctx.fillText('Клик по магазину - строительство',cx,315);
-            if(G.best>0){ctx.fillStyle='#FFD700';ctx.fillText(`🏆 Рекорд: ${G.best} ночей`,cx,355);}
-            ctx.textAlign='left';
+        function drwM(){
+            cx.fillStyle='#0a0a1a';cx.fillRect(0,0,cv.width,cv.height);
+            const cx2=cv.width/2;
+            cx.fillStyle='#FFD700';cx.font=`bold ${Math.min(36,cv.width/16)}px Arial`;cx.textAlign='center';
+            cx.fillText('🏰 CRYSTAL SURVIVORS 🏰',cx2,100);
+            cx.fillStyle='white';cx.font=`${Math.min(16,cv.width/35)}px Arial`;cx.fillText('Строй защиту, переживи ночи!',cx2,150);
+            cx.fillStyle='#2a2a3a';cx.fillRect(cx2-120,200,240,50);cx.strokeStyle='#FFD700';cx.strokeRect(cx2-120,200,240,50);
+            cx.fillStyle='white';cx.font='bold 20px Arial';cx.fillText('▶ НАЧАТЬ ИГРУ',cx2,232);
+            cx.fillStyle='#AAA';cx.font='13px Arial';cx.fillText('WASD/Стрелки [E]сбор [F]щит [N]пропуск',cx2,290);
+            cx.fillText('Клик по магазину - строительство',cx2,315);
+            if(G.bs>0){cx.fillStyle='#FFD700';cx.fillText(`🏆 Рекорд: ${G.bs} ночей`,cx2,355)}
+            cx.textAlign='left';
         }
         
         // ==================== INPUT ====================
         document.addEventListener('keydown',e=>{
             const k=e.key.toLowerCase();
-            if(G.phase=='game_over'){if(k=='r')startGame();return;}
-            if(G.phase=='menu'){if(k=='enter'||k==' '){startGame();return;}return;}
-            if(G.phase!='day'&&G.phase!='night') return;
-            if(k=='e'){e.preventDefault();collect();return;}
-            if(k=='f'){e.preventDefault();shield();return;}
+            if(G.ph=='game_over'){if(k=='r')stG();return}
+            if(G.ph=='menu'){if(k=='enter'||k==' '){stG();return}return}
+            if(G.ph!='day'&&G.ph!='night')return;
+            if(k=='e'){e.preventDefault();cl();return}
+            if(k=='f'){e.preventDefault();shld();return}
+            if(k=='n'){e.preventDefault();skipToNight();return}
             let dx=0,dy=0;
             if(k=='w'||k=='arrowup')dy=-1;
             else if(k=='s'||k=='arrowdown')dy=1;
             else if(k=='a'||k=='arrowleft')dx=-1;
             else if(k=='d'||k=='arrowright')dx=1;
             else return;
-            e.preventDefault(); moveB(dx,dy);
+            e.preventDefault();mB(dx,dy);
         });
         
-        canvas.addEventListener('click',e=>{
-            if(G.phase=='game_over'||G.phase=='menu'){startGame();return;}
-            if(G.phase!='day') return;
-            const r=canvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
-            const sx=canvas.width-170;
-            if(x>=sx&&y<canvas.height-70){
-                const items=['wood_wall','stone_wall','wood_tower','stone_tower','totem_light','time_trap','fire_trap','teleport'];
-                const idx=((y-42)/28)|0;
-                if(idx>=0&&idx<items.length){G.build=items[idx];return;}
-            }
-            const cx=x/CFG.CELL|0, cy=y/CFG.CELL|0;
-            if(cx>=0&&cx<CFG.SIZE_X&&cy>=0&&cy<CFG.SIZE_Y&&G.build){
-                if(build(cx,cy,G.build)) G.build=null;
-            }
+        document.getElementById('skipNight').addEventListener('click',skipToNight);
+        
+        cv.addEventListener('click',e=>{
+            if(G.ph=='game_over'||G.ph=='menu'){stG();return}
+            if(G.ph!='day')return;
+            const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
+            const sx=cv.width-170;
+            if(x>=sx&&y<cv.height-70){const its=['wood_wall','stone_wall','wood_tower','stone_tower','totem_light','time_trap','fire_trap','teleport'],idx=((y-42)/28)|0;if(idx>=0&&idx<its.length){G.bld=its[idx];return}}
+            const clX=x/C.CL|0,clY=y/C.CL|0;
+            if(clX>=0&&clX<C.SX&&clY>=0&&clY<C.SY&&G.bld){if(bld(clX,clY,G.bld))G.bld=null}
         });
         
         // ==================== LOOP ====================
         function upd(){
-            if(G.phase=='day'||G.phase=='night'){
-                G.time-=1/60; if(G.time<=0) chgPhase();
-                updB(); updR(); updWall(); twrAtk(); updBul(); actTrp(); movRed(); chkNEnd(); chkNear();
-            }
+            updateTimer(); // Обновляем таймер на основе реального времени
+            if(G.ph=='day'||G.ph=='night'){uB();uR();uW();tA();uBl();aT();mvR();cNE();cN()}
         }
         
-        function loop(){upd();draw();requestAnimationFrame(loop);}
+        function loop(){upd();drw();requestAnimationFrame(loop)}
         
         // ==================== START ====================
-        (async ()=>{
-            await initSDK();
-            await loadSprites();
-            document.getElementById('loading').style.display='none';
-            loop();
-        })();
+        document.getElementById('loading').style.display='none';
+        G.lastTimerUpdate = Date.now();
+        requestAnimationFrame(loop);
     </script>
 </body>
 </html>
