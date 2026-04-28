@@ -5,16 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>🏰 Crystal Survivors</title>
     
-    <!-- Yandex Games SDK -->
     <script src="/sdk.js"></script>
     
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: #0a0a1a;
             display: flex;
@@ -24,27 +18,15 @@
             overflow: hidden;
             font-family: 'Arial', sans-serif;
             touch-action: none;
-            -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
         }
-        
-        canvas {
-            border: 2px solid #FFD700;
-            display: block;
-        }
-        
+        canvas { border: 2px solid #FFD700; display: block; }
         #loading {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            color: #FFD700;
-            font-size: 24px;
-            font-family: 'Arial', sans-serif;
-            text-align: center;
-            pointer-events: none;
-            z-index: 10;
+            color: #FFD700; font-size: 20px; text-align: center; z-index: 10;
         }
     </style>
 </head>
@@ -55,81 +37,65 @@
     <script>
         // ==================== YANDEX SDK ====================
         let ysdk = null;
-        
         async function initSDK() {
             try {
                 if (typeof YaGames !== 'undefined') {
                     ysdk = await YaGames.init();
                     console.log('✅ SDK ready');
                 }
-            } catch(e) {
-                console.log('SDK not available');
-            }
+            } catch(e) { console.log('SDK not available'); }
         }
         
-        // ==================== SPRITES ====================
+        // ==================== SPRITES - ВСЕ В КОРНЕ ====================
         const sprites = {};
         
-        function loadSprite(key, path) {
+        function loadSprite(key, filename) {
             return new Promise((resolve) => {
                 const img = new Image();
-                img.onload = () => {
-                    sprites[key] = img;
-                    console.log('✅', key);
-                    resolve();
+                img.onload = () => { 
+                    sprites[key] = img; 
+                    console.log('✅', filename);
+                    resolve(); 
                 };
-                img.onerror = () => {
-                    console.log('❌', key, '- using fallback');
-                    sprites[key] = null; // Будем рисовать примитивами
-                    resolve();
+                img.onerror = () => { 
+                    console.log('❌', filename, '- будет заглушка');
+                    sprites[key] = null; 
+                    resolve(); 
                 };
-                img.src = path;
+                img.src = filename;
             });
         }
         
         async function loadAllSprites() {
-            const paths = {
-                'blue_idle': 'sprites/creatures/blue_idle.png',
-                'blue_scared': 'sprites/creatures/blue_scared.png',
-                'red': 'sprites/creatures/red.png',
-                'red_sleep': 'sprites/creatures/red_sleep.png',
-                'crystal': 'sprites/items/crystal.png',
-                'shield': 'sprites/items/shield.png',
-                'tree': 'sprites/items/tree.png',
-                'rock': 'sprites/items/stone.png',
-                'wall_wood': 'sprites/buildings/wall_wood.png',
-                'wall_stone': 'sprites/buildings/wall_stone.png',
-                'totem_light': 'sprites/buildings/totem_light.png',
-                'tower_wood': 'sprites/buildings/tower_wood.png',
-                'tower_stone': 'sprites/buildings/tower_stone.png',
-                'teleport': 'sprites/buildings/teleport.png',
-                'trap_time': 'sprites/traps/trap_time.png',
-                'trap_fire': 'sprites/traps/trap_fire.png',
-                'ui_crystal': 'sprites/ui/crystal.png',
-                'day': 'sprites/ui/day.png',
-                'night': 'sprites/ui/night.png'
+            const files = {
+                'blue_idle': 'blue_idle.png',
+                'blue_scared': 'blue_scared.png',
+                'red': 'red.png',
+                'red_sleep': 'red_sleep.png',
+                'crystal': 'crystal.png',
+                'shield': 'shield.png',
+                'tree': 'tree.png',
+                'rock': 'stone.png',
+                'wall_wood': 'wall_wood.png',
+                'wall_stone': 'wall_stone.png',
+                'totem_light': 'totem_light.png',
+                'tower_wood': 'tower_wood.png',
+                'tower_stone': 'tower_stone.png',
+                'teleport': 'teleport.png',
+                'trap_time': 'trap_time.png',
+                'trap_fire': 'trap_fire.png',
+                'ui_crystal': 'ui_crystal.png',
+                'day': 'day.png',
+                'night': 'night.png'
             };
             
-            // Загружаем с таймаутом - если за 3 секунды не загрузились, используем fallback
             const promises = [];
-            for (const [key, path] of Object.entries(paths)) {
-                promises.push(loadSprite(key, path));
+            for (const [key, filename] of Object.entries(files)) {
+                promises.push(loadSprite(key, filename));
             }
             
-            // Добавляем таймаут на случай зависания
-            const timeout = new Promise((resolve) => {
-                setTimeout(() => {
-                    console.log('⏰ Sprite loading timeout - using fallbacks');
-                    resolve();
-                }, 3000);
-            });
-            
-            await Promise.race([
-                Promise.all(promises),
-                timeout
-            ]);
-            
-            console.log(`📦 Sprites: ${Object.values(sprites).filter(s => s !== null).length}/${Object.keys(sprites).length} loaded`);
+            await Promise.all(promises);
+            console.log('📦 Спрайты загружены');
         }
         
         // ==================== CONFIG ====================
@@ -392,7 +358,7 @@
                     const d=Math.abs(t.x-Math.round(r.x))+Math.abs(t.y-Math.round(r.y));
                     if(d<=t.range&&d<cd){cd=d;cr=r;}
                 }
-                if(cr){t.ls=now;gs.bullets.push({x:t.x,y:t.y,tx:Math.round(cr.x),ty:Math.round(cr.y),dmg:t.damage,st:now,tr:cr});}
+                if(cr){t.ls=now;gs.bullets.push({x:t.x,y:t.y,tx:Math.round(cr.x),ty:Math.round(cr.y),dmg:t.dmg,st:now,tr:cr});}
             }
         }
         
@@ -570,7 +536,8 @@
         
         // ==================== RENDER ====================
         function spr(key,x,y,w,h) {
-            if(sprites[key]) ctx.drawImage(sprites[key],x,y,w,h);
+            if(sprites[key]) { ctx.drawImage(sprites[key],x,y,w,h); return true; }
+            return false;
         }
         
         function draw() {
@@ -585,10 +552,11 @@
             
             // Resources
             for(const r of gs.resources) {
-                if(r.type=='tree'){if(!spr('tree',r.x*C,r.y*C,C,C)){ctx.fillStyle='#228B22';ctx.beginPath();ctx.arc(r.x*C+C/2,r.y*C+C/2,C*.35,0,Math.PI*2);ctx.fill();}}
-                else if(r.type=='rock'){if(!spr('rock',r.x*C,r.y*C,C,C)){ctx.fillStyle='#808080';ctx.fillRect(r.x*C+C*.2,r.y*C+C*.2,C*.6,C*.6);}}
-                else if(r.type=='crystal'){if(!spr('crystal',r.x*C,r.y*C,C,C)){ctx.fillStyle='#FF69B4';ctx.beginPath();ctx.arc(r.x*C+C/2,r.y*C+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
-                else if(r.type=='shield'){if(!spr('shield',r.x*C,r.y*C,C,C)){ctx.fillStyle='#FFD700';ctx.beginPath();ctx.arc(r.x*C+C/2,r.y*C+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
+                const rx=r.x*C, ry=r.y*C;
+                if(r.type=='tree'){if(!spr('tree',rx,ry,C,C)){ctx.fillStyle='#228B22';ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.35,0,Math.PI*2);ctx.fill();}}
+                else if(r.type=='rock'){if(!spr('rock',rx,ry,C,C)){ctx.fillStyle='#808080';ctx.fillRect(rx+C*.2,ry+C*.2,C*.6,C*.6);}}
+                else if(r.type=='crystal'){if(!spr('crystal',rx,ry,C,C)){ctx.fillStyle='#FF69B4';ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
+                else if(r.type=='shield'){if(!spr('shield',rx,ry,C,C)){ctx.fillStyle='#FFD700';ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
             }
             
             // Walls
@@ -623,7 +591,7 @@
             // Bullets
             for(const b of gs.bullets) {
                 ctx.fillStyle='#FF0'; ctx.shadowBlur=8; ctx.shadowColor='#FFD700';
-                ctx.beginPath(); ctx.arc((b.cx||b.x)*C+C/2,(b.cy||b.y)*C+C/2,C*.12,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+                ctx.beginPath(); ctx.arc((b.cx||b.x)*C+C/2,(b.cy||b.y)*C+C/2,4,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
             }
             
             // Blue unit
@@ -633,7 +601,6 @@
                 if(!spr(sk,bx,by,C,C)) {
                     ctx.fillStyle=gs.gamePhase=='night'?'#69F':'#48F';
                     ctx.beginPath(); ctx.arc(bx+C/2,by+C/2,C*.35,0,Math.PI*2); ctx.fill();
-                    ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(bx+C*.4,by+C*.42,C*.08,0,Math.PI*2); ctx.arc(bx+C*.6,by+C*.42,C*.08,0,Math.PI*2); ctx.fill();
                 }
                 if(b.hasShield&&!b.shieldReady){ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.beginPath();ctx.arc(bx+C/2,by+C/2,C*.45,0,Math.PI*2);ctx.stroke();}
             }
@@ -651,23 +618,11 @@
                 ctx.fillText(`♥${r.hp}`,rx+C/2,ry-C*.3); ctx.textAlign='left';
             }
             
-            // Nearby
-            if(gs.nearbyObject&&gs.gamePhase=='day') {
-                let nx,ny;
-                if(gs.nearbyObject.type=='resource'){nx=gs.nearbyObject.data.x;ny=gs.nearbyObject.data.y;}
-                else if(gs.nearbyObject.type=='wall'){nx=gs.nearbyObject.x;ny=gs.nearbyObject.y;}
-                else if(gs.nearbyObject.type=='tower'){nx=gs.towers[gs.nearbyObject.idx].x;ny=gs.towers[gs.nearbyObject.idx].y;}
-                else if(gs.nearbyObject.type=='trap'){nx=gs.traps[gs.nearbyObject.idx].x;ny=gs.traps[gs.nearbyObject.idx].y;}
-                else if(gs.nearbyObject.type=='totem'){nx=gs.totems[gs.nearbyObject.idx].x;ny=gs.totems[gs.nearbyObject.idx].y;}
-                else if(gs.nearbyObject.type=='teleport'){nx=gs.teleports[gs.nearbyObject.idx].x;ny=gs.teleports[gs.nearbyObject.idx].y;}
-                if(nx!==undefined){ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.strokeRect(nx*C,ny*C,C,C);}
-            }
-            
             // Shop
             if(gs.gamePhase=='day'&&gs.gamePhase!='game_over') {
                 const sx=canvas.width-170;
                 ctx.fillStyle='rgba(13,13,26,.95)';ctx.fillRect(sx-5,10,165,canvas.height-80);
-                ctx.strokeStyle='#FFD700';ctx.lineWidth=2;ctx.strokeRect(sx-5,10,165,canvas.height-80);
+                ctx.strokeStyle='#FFD700';ctx.strokeRect(sx-5,10,165,canvas.height-80);
                 ctx.fillStyle='#FFD700';ctx.font='bold 11px Arial';ctx.textAlign='center';
                 ctx.fillText('🏪 МАГАЗИН',sx+80,25); ctx.textAlign='left';
                 const items=[['Дер.стена','wood_wall',CONFIG.WOOD_WALL_COST,'wood'],['Кам.стена','stone_wall',CONFIG.STONE_WALL_COST,'stone'],['Дер.башня','wood_tower',CONFIG.WOOD_TOWER_COST,'wood'],['Кам.башня','stone_tower',CONFIG.STONE_TOWER_COST,'stone'],['Тотем','totem_light',CONFIG.TOTEM_LIGHT_COST,'crystal'],['Лов.врем','time_trap',CONFIG.TIME_TRAP_COST,'crystal'],['Огн.лов','fire_trap',CONFIG.FIRE_TRAP_COST,'crystal'],['Телепорт','teleport',CONFIG.TELEPORT_COST,'crystal']];
@@ -677,15 +632,6 @@
                     ctx.fillStyle='white';ctx.font='9px Arial';ctx.fillText(n,sx+5,y+2);
                     ctx.fillText((r=='crystal'?'💎':r=='wood'?'🪵':'🪨')+c,sx+110,y+2);
                 });
-            }
-            
-            // Message
-            if(gs.message&&Date.now()<gs.messageTime) {
-                const my=canvas.height-75;
-                ctx.fillStyle='rgba(26,26,46,.9)';ctx.fillRect(canvas.width/2-150,my-10,300,25);
-                ctx.strokeStyle='#FFD700';ctx.strokeRect(canvas.width/2-150,my-10,300,25);
-                ctx.fillStyle='#FFD700';ctx.font='bold 12px Arial';ctx.textAlign='center';
-                ctx.fillText(gs.message,canvas.width/2,my+7);ctx.textAlign='left';
             }
             
             // Game over
@@ -702,21 +648,21 @@
             // UI bar
             const uy=C*CONFIG.SIZE_Y;
             ctx.fillStyle='#1a1a2e';ctx.fillRect(0,uy,canvas.width,70);
-            ctx.strokeStyle='#FFD700';ctx.lineWidth=2;ctx.strokeRect(0,uy,canvas.width,70);
+            ctx.strokeStyle='#FFD700';ctx.strokeRect(0,uy,canvas.width,70);
             spr(gs.gamePhase=='day'?'day':'night',10,uy+5,40,40);
             ctx.fillStyle=gs.gamePhase=='day'?'#FFD700':'#8B6CFF';ctx.font='bold 14px Arial';
-            ctx.fillText(`${gs.gamePhase=='day'?'☀️':'🌙'} ${gs.gamePhase=='day'?'ДЕНЬ':'НОЧЬ'} ${gs.currentNight}`,55,uy+25);
-            ctx.fillStyle='#F44';ctx.fillText(`👹${gs.redUnits.length}`,200,uy+25);
-            ctx.fillStyle='#8B6914';ctx.fillText(`🪵${gs.woodCount}`,280,uy+25);
-            ctx.fillStyle='#A0A0A0';ctx.fillText(`🪨${gs.stoneCount}`,360,uy+25);
-            spr('ui_crystal',440,uy+8,24,24); ctx.fillStyle='#FFD700';ctx.fillText(`${gs.crystals}`,468,uy+25);
+            ctx.fillText(`${gs.gamePhase=='day'?'☀️':'🌙'} ${gs.currentNight}`,55,uy+25);
+            ctx.fillStyle='#F44';ctx.fillText(`👹${gs.redUnits.length}`,160,uy+25);
+            ctx.fillStyle='#8B6914';ctx.fillText(`🪵${gs.woodCount}`,230,uy+25);
+            ctx.fillStyle='#A0A0A0';ctx.fillText(`🪨${gs.stoneCount}`,300,uy+25);
+            spr('ui_crystal',370,uy+8,24,24); ctx.fillStyle='#FFD700';ctx.fillText(`${gs.crystals}`,398,uy+25);
             const m=Math.floor(gs.timeLeft/60),s=Math.floor(gs.timeLeft%60);
-            ctx.fillStyle='#FFE66D';ctx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,canvas.width-120,uy+25);
+            ctx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,canvas.width-120,uy+25);
             const mt=gs.gamePhase=='day'?CONFIG.DAY_DURATION:CONFIG.NIGHT_DURATION;
             const bw=(gs.timeLeft/mt)*(canvas.width-200);
             ctx.fillStyle='#333';ctx.fillRect(60,uy+35,canvas.width-120,8);
             ctx.fillStyle=gs.gamePhase=='day'?'#FFD700':'#8B3A3A';ctx.fillRect(60,uy+35,bw,8);
-            ctx.fillStyle='#FFD700';ctx.font='11px Arial';ctx.fillText(`🏆${gs.bestScore}`,canvas.width-180,uy+18);
+            ctx.fillStyle='#FFD700';ctx.font='11px Arial';ctx.fillText(`🏆${gs.bestScore}`,canvas.width-140,uy+18);
         }
         
         function drawMenu() {
@@ -727,7 +673,7 @@
             ctx.fillStyle='white';ctx.font=`${Math.min(16,canvas.width/35)}px Arial`;
             ctx.fillText('Строй защиту, переживи ночи!',cx,150);
             ctx.fillStyle='#2a2a3a';ctx.fillRect(cx-120,200,240,50);
-            ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.strokeRect(cx-120,200,240,50);
+            ctx.strokeStyle='#FFD700';ctx.strokeRect(cx-120,200,240,50);
             ctx.fillStyle='white';ctx.font='bold 20px Arial';ctx.fillText('▶ НАЧАТЬ ИГРУ',cx,232);
             ctx.fillStyle='#AAA';ctx.font='13px Arial';
             ctx.fillText('WASD/Стрелки [E]сбор [F]щит',cx,290);
@@ -777,11 +723,6 @@
                 updBlue(); updReds(); updWalls(); towersAtk(); updBullets();
                 actTraps(); moveReds(); chkNightEnd(); checkNearby();
             }
-        }
-        
-        function render() {
-            if(gs.gamePhase=='menu') drawMenu();
-            else draw();
         }
         
         function loop() { update(); render(); requestAnimationFrame(loop); }
