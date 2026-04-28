@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>🏰 Crystal Survivors</title>
     
-    <script src="/sdk.js"></script>
-    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -17,103 +15,26 @@
             height: 100vh;
             overflow: hidden;
             font-family: 'Arial', sans-serif;
-            touch-action: none;
-            -webkit-user-select: none;
-            user-select: none;
         }
-        canvas { border: 2px solid #FFD700; display: block; }
-        #loading {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: #FFD700; font-size: 20px; text-align: center; z-index: 10;
+        canvas { 
+            border: 2px solid #FFD700; 
+            display: block;
+            background: #1a1a2e;
         }
     </style>
 </head>
 <body>
-    <div id="loading">Загрузка...</div>
     <canvas id="gameCanvas"></canvas>
     
     <script>
-        // ==================== YANDEX SDK ====================
-        let ysdk = null;
-        async function initSDK() {
-            try {
-                if (typeof YaGames !== 'undefined') {
-                    ysdk = await YaGames.init();
-                    console.log('✅ SDK ready');
-                }
-            } catch(e) { console.log('SDK not available'); }
-        }
+        console.log('🚀 Игра запускается...');
         
-        // ==================== SPRITES - ВСЕ В КОРНЕ ====================
-        const sprites = {};
-        
-        function loadSprite(key, filename) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => { 
-                    sprites[key] = img; 
-                    console.log('✅', filename);
-                    resolve(); 
-                };
-                img.onerror = () => { 
-                    console.log('❌', filename, '- будет заглушка');
-                    sprites[key] = null; 
-                    resolve(); 
-                };
-                img.src = filename;
-            });
-        }
-        
-        async function loadAllSprites() {
-            const files = {
-                'blue_idle': 'blue_idle.png',
-                'blue_scared': 'blue_scared.png',
-                'red': 'red.png',
-                'red_sleep': 'red_sleep.png',
-                'crystal': 'crystal.png',
-                'shield': 'shield.png',
-                'tree': 'tree.png',
-                'rock': 'stone.png',
-                'wall_wood': 'wall_wood.png',
-                'wall_stone': 'wall_stone.png',
-                'totem_light': 'totem_light.png',
-                'tower_wood': 'tower_wood.png',
-                'tower_stone': 'tower_stone.png',
-                'teleport': 'teleport.png',
-                'trap_time': 'trap_time.png',
-                'trap_fire': 'trap_fire.png',
-                'ui_crystal': 'ui_crystal.png',
-                'day': 'day.png',
-                'night': 'night.png'
-            };
-            
-            const promises = [];
-            for (const [key, filename] of Object.entries(files)) {
-                promises.push(loadSprite(key, filename));
-            }
-            
-            await Promise.all(promises);
-            console.log('📦 Спрайты загружены');
-        }
-        
-        // ==================== CONFIG ====================
+        // ==================== НАСТРОЙКИ ====================
         const CONFIG = {
             SIZE_X: 25, SIZE_Y: 18, CELL: 32,
             DAY_DURATION: 60, NIGHT_DURATION: 30,
             START_WOOD: 5, START_STONE: 3, START_CRYSTALS: 2,
-            WOOD_WALL_COST: 3, STONE_WALL_COST: 5,
-            WOOD_TOWER_COST: 8, STONE_TOWER_COST: 12,
-            TOTEM_LIGHT_COST: 8, TIME_TRAP_COST: 5,
-            FIRE_TRAP_COST: 7, TELEPORT_COST: 10,
-            TREE_SPAWN_COUNT: 20, ROCK_SPAWN_COUNT: 12,
-            RED_SPEED_MULTIPLIER: 0.08,
-            RED_BASE_HP: 3, RED_HP_INCREASE: 1,
-            RED_SPAWN_BASE: 3, RED_SPAWN_INCREASE_EVERY: 2,
-            WOOD_WALL_BREAK_TIME: 5, STONE_WALL_BREAK_TIME: 15,
-            SHIELD_DURATION: 5, TOWER_COOLDOWN: 1.0,
-            MOVE_DURATION: 0.15
+            WOOD_WALL_COST: 3, STONE_WALL_COST: 5
         };
         
         // ==================== CANVAS ====================
@@ -121,622 +42,441 @@
         const ctx = canvas.getContext('2d');
         
         function resizeCanvas() {
-            const w = Math.min(window.innerWidth - 20, 1000);
-            const h = Math.min(window.innerHeight - 20, 700);
+            const maxW = Math.min(window.innerWidth - 20, 1000);
+            const maxH = Math.min(window.innerHeight - 20, 700);
             const ratio = CONFIG.SIZE_X / CONFIG.SIZE_Y;
-            let cw, ch;
-            if (w / h > ratio) { ch = h; cw = ch * ratio; }
-            else { cw = w; ch = cw / ratio; }
-            CONFIG.CELL = Math.floor(Math.max(cw / CONFIG.SIZE_X, 20));
+            
+            let w, h;
+            if (maxW / maxH > ratio) {
+                h = maxH;
+                w = h * ratio;
+            } else {
+                w = maxW;
+                h = w / ratio;
+            }
+            
+            CONFIG.CELL = Math.floor(Math.max(w / CONFIG.SIZE_X, 20));
             canvas.width = CONFIG.CELL * CONFIG.SIZE_X;
             canvas.height = CONFIG.CELL * CONFIG.SIZE_Y + 70;
+            
+            console.log('📐 Canvas:', canvas.width, 'x', canvas.height);
         }
+        
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
         
-        // ==================== GAME STATE ====================
-        const gs = {
-            walls: new Map(), blueUnits: [], redUnits: [], resources: [],
-            towers: [], traps: [], totems: [], teleports: [], bullets: [],
-            woodCount: CONFIG.START_WOOD, stoneCount: CONFIG.START_STONE,
-            crystals: CONFIG.START_CRYSTALS, gamePhase: 'menu',
-            currentNight: 1, timeLeft: CONFIG.DAY_DURATION,
-            selectedBuilding: null, nearbyObject: null,
-            message: '', messageTime: 0, wallAttacks: new Map(),
-            blueIsMoving: false, blueMoveStartX: 0, blueMoveStartY: 0,
-            blueTargetX: 0, blueTargetY: 0, blueMoveStartTime: 0,
-            redMoves: new Map(), score: 0,
-            bestScore: parseInt(localStorage.getItem('cs_best') || '0')
-        };
+        // ==================== СОСТОЯНИЕ ИГРЫ ====================
+        let gameState = 'menu'; // menu, day, night, game_over
+        let currentNight = 1;
+        let timeLeft = CONFIG.DAY_DURATION;
+        let woodCount = 5;
+        let stoneCount = 3;
+        let crystals = 2;
+        let blueX = 12;
+        let blueY = 9;
+        let reds = [];
+        let walls = [];
+        let score = 0;
+        let bestScore = 0;
         
-        // ==================== HELPERS ====================
-        function posFree(x, y) {
-            const k = `${x},${y}`;
-            if (gs.walls.has(k)) return false;
-            if (gs.towers.some(t=>t.x==x&&t.y==y)) return false;
-            if (gs.traps.some(t=>t.x==x&&t.y==y)) return false;
-            if (gs.totems.some(t=>t.x==x&&t.y==y)) return false;
-            if (gs.teleports.some(t=>t.x==x&&t.y==y)) return false;
-            return true;
-        }
-        
-        function msg(t, d=2) {
-            gs.message = t;
-            gs.messageTime = Date.now() + d*1000;
-        }
-        
-        function redHP(n) { return CONFIG.RED_BASE_HP + (n-1)*CONFIG.RED_HP_INCREASE; }
-        function redCount(n) { return CONFIG.RED_SPAWN_BASE + Math.floor((n-1)/CONFIG.RED_SPAWN_INCREASE_EVERY); }
-        function wallKey(x,y) { return `${x},${y}`; }
-        
-        // ==================== WORLD GEN ====================
-        function genWorld() {
-            gs.resources = [];
-            for(let i=0;i<CONFIG.TREE_SPAWN_COUNT;i++) {
-                for(let a=0;a<100;a++) {
-                    const x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
-                    const y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
-                    if(posFree(x,y)&&!gs.resources.some(r=>r.x==x&&r.y==y)) {
-                        gs.resources.push({x,y,type:'tree'}); break;
-                    }
-                }
-            }
-            for(let i=0;i<CONFIG.ROCK_SPAWN_COUNT;i++) {
-                for(let a=0;a<100;a++) {
-                    const x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
-                    const y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
-                    if(posFree(x,y)&&!gs.resources.some(r=>r.x==x&&r.y==y)) {
-                        gs.resources.push({x,y,type:'rock'}); break;
-                    }
-                }
-            }
-            for(let i=0;i<5;i++) {
-                for(let a=0;a<100;a++) {
-                    const x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
-                    const y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
-                    if(posFree(x,y)&&!gs.resources.some(r=>r.x==x&&r.y==y)) {
-                        const t=['crystal','shield','speed'][Math.floor(Math.random()*3)];
-                        gs.resources.push({x,y,type:t}); break;
-                    }
-                }
-            }
-        }
-        
-        function genInitial() {
-            gs.walls.clear(); gs.blueUnits=[]; gs.redUnits=[];
-            gs.resources=[]; gs.towers=[]; gs.traps=[];
-            gs.totems=[]; gs.teleports=[]; gs.bullets=[];
-            gs.wallAttacks.clear(); gs.redMoves.clear();
+        // ==================== ГЕНЕРАЦИЯ ====================
+        function startDay() {
+            gameState = 'day';
+            timeLeft = CONFIG.DAY_DURATION;
+            reds = [];
+            walls = [];
             
-            for(let i=0;i<CONFIG.SIZE_X;i++) {
-                gs.walls.set(wallKey(i,0),{hp:999,maxHp:999,type:'border'});
-                gs.walls.set(wallKey(i,CONFIG.SIZE_Y-1),{hp:999,maxHp:999,type:'border'});
-            }
-            for(let i=0;i<CONFIG.SIZE_Y;i++) {
-                gs.walls.set(wallKey(0,i),{hp:999,maxHp:999,type:'border'});
-                gs.walls.set(wallKey(CONFIG.SIZE_X-1,i),{hp:999,maxHp:999,type:'border'});
-            }
-            
-            while(true) {
-                const x=5+Math.floor(Math.random()*(CONFIG.SIZE_X-10));
-                const y=3+Math.floor(Math.random()*(CONFIG.SIZE_Y-6));
-                if(!gs.walls.has(wallKey(x,y))) {
-                    gs.blueUnits.push({x,y,hasShield:false,shieldReady:true});
-                    break;
+            // Случайные стены для теста
+            for (let i = 0; i < 15; i++) {
+                const x = Math.floor(Math.random() * (CONFIG.SIZE_X - 2)) + 1;
+                const y = Math.floor(Math.random() * (CONFIG.SIZE_Y - 2)) + 1;
+                if (x !== blueX || y !== blueY) {
+                    walls.push({x, y, hp: 100});
                 }
             }
             
-            gs.woodCount=CONFIG.START_WOOD; gs.stoneCount=CONFIG.START_STONE;
-            gs.crystals=CONFIG.START_CRYSTALS;
-            genWorld();
+            console.log('☀️ День', currentNight, '- Стен:', walls.length);
         }
         
-        function spawnReds() {
-            gs.redUnits=[];
-            const c=redCount(gs.currentNight), hp=redHP(gs.currentNight);
-            for(let i=0;i<c;i++) {
-                while(true) {
-                    const s=['top','bottom','left','right'][Math.floor(Math.random()*4)];
-                    let x,y;
-                    if(s=='top'){x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));y=1;}
-                    else if(s=='bottom'){x=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));y=CONFIG.SIZE_Y-2;}
-                    else if(s=='left'){x=1;y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));}
-                    else{x=CONFIG.SIZE_X-2;y=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));}
-                    if(!gs.walls.has(wallKey(x,y))){gs.redUnits.push({x,y,hp});break;}
-                }
+        function startNight() {
+            gameState = 'night';
+            timeLeft = CONFIG.NIGHT_DURATION;
+            
+            const count = 3 + Math.floor((currentNight - 1) / 2);
+            reds = [];
+            
+            for (let i = 0; i < count; i++) {
+                let x, y;
+                const side = Math.floor(Math.random() * 4);
+                if (side === 0) { x = Math.floor(Math.random() * 23) + 1; y = 1; }
+                else if (side === 1) { x = Math.floor(Math.random() * 23) + 1; y = 16; }
+                else if (side === 2) { x = 1; y = Math.floor(Math.random() * 16) + 1; }
+                else { x = 23; y = Math.floor(Math.random() * 16) + 1; }
+                
+                reds.push({x, y, hp: 3 + (currentNight - 1)});
             }
-        }
-        
-        // ==================== BFS ====================
-        function bfs(start,target) {
-            const q=[start], cf=new Map();
-            cf.set(`${start.x},${start.y}`,null);
-            while(q.length>0) {
-                const c=q.shift();
-                if(c.x==target.x&&c.y==target.y) break;
-                for(const d of[{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}]) {
-                    const nx=c.x+d.dx,ny=c.y+d.dy;
-                    const nk=`${nx},${ny}`;
-                    if(nx<0||nx>=CONFIG.SIZE_X||ny<0||ny>=CONFIG.SIZE_Y) continue;
-                    if(gs.walls.has(nk)) continue;
-                    if(cf.has(nk)) continue;
-                    cf.set(nk,`${c.x},${c.y}`);
-                    q.push({x:nx,y:ny});
-                }
-            }
-            const tk=`${target.x},${target.y}`;
-            if(!cf.has(tk)) return null;
-            const path=[];
-            let ck=tk;
-            while(ck!==`${start.x},${start.y}`) {
-                const [x,y]=ck.split(',').map(Number);
-                path.unshift({x,y});
-                ck=cf.get(ck);
-            }
-            return path;
-        }
-        
-        // ==================== MOVEMENT ====================
-        function moveBlue(dx,dy) {
-            if(gs.gamePhase!='day'&&gs.gamePhase!='night') return;
-            if(!gs.blueUnits.length||gs.blueIsMoving) return;
-            const b=gs.blueUnits[0];
-            const nx=Math.round(b.x)+dx, ny=Math.round(b.y)+dy;
-            if(gs.walls.has(wallKey(nx,ny))) return;
-            if(gs.towers.some(t=>t.x==nx&&t.y==ny)) return;
-            if(gs.traps.some(t=>t.x==nx&&t.y==ny)) return;
-            if(gs.totems.some(t=>t.x==nx&&t.y==ny)) return;
-            if(gs.teleports.some(t=>t.x==nx&&t.y==ny)) return;
-            gs.blueIsMoving=true;
-            gs.blueMoveStartX=Math.round(b.x);
-            gs.blueMoveStartY=Math.round(b.y);
-            gs.blueTargetX=nx; gs.blueTargetY=ny;
-            gs.blueMoveStartTime=Date.now()/1000;
-        }
-        
-        function updBlue() {
-            if(!gs.blueIsMoving) return;
-            const t=(Date.now()/1000)-gs.blueMoveStartTime;
-            if(t>=CONFIG.MOVE_DURATION) {
-                gs.blueUnits[0].x=gs.blueTargetX;
-                gs.blueUnits[0].y=gs.blueTargetY;
-                gs.blueIsMoving=false;
-                for(const tel of gs.teleports) {
-                    if(Math.round(gs.blueUnits[0].x)==tel.x&&Math.round(gs.blueUnits[0].y)==tel.y) {
-                        for(let a=0;a<50;a++) {
-                            const nx=1+Math.floor(Math.random()*(CONFIG.SIZE_X-2));
-                            const ny=1+Math.floor(Math.random()*(CONFIG.SIZE_Y-2));
-                            if(posFree(nx,ny)&&(nx!=tel.x||ny!=tel.y)) {
-                                gs.blueUnits[0].x=nx; gs.blueUnits[0].y=ny;
-                                msg('🌀 Телепортация!'); break;
-                            }
-                        }
-                        break;
-                    }
-                }
-                checkNearby();
-            } else {
-                const p=t/CONFIG.MOVE_DURATION;
-                gs.blueUnits[0].x=gs.blueMoveStartX+(gs.blueTargetX-gs.blueMoveStartX)*p;
-                gs.blueUnits[0].y=gs.blueMoveStartY+(gs.blueTargetY-gs.blueMoveStartY)*p;
-            }
-        }
-        
-        function moveRed(idx,tx,ty) {
-            if(idx>=gs.redUnits.length) return;
-            gs.redMoves.set(idx,{
-                sx:gs.redUnits[idx].x, sy:gs.redUnits[idx].y,
-                tx, ty, st:Date.now()/1000
-            });
-        }
-        
-        function updReds() {
-            const now=Date.now()/1000;
-            for(const [i,m] of gs.redMoves) {
-                if(i>=gs.redUnits.length){gs.redMoves.delete(i);continue;}
-                const e=now-m.st;
-                if(e>=CONFIG.MOVE_DURATION) {
-                    gs.redUnits[i].x=m.tx; gs.redUnits[i].y=m.ty;
-                    gs.redMoves.delete(i);
-                } else {
-                    const p=e/CONFIG.MOVE_DURATION;
-                    gs.redUnits[i].x=m.sx+(m.tx-m.sx)*p;
-                    gs.redUnits[i].y=m.sy+(m.ty-m.sy)*p;
-                }
-            }
-        }
-        
-        // ==================== COMBAT ====================
-        function towersAtk() {
-            if(gs.gamePhase!='night') return;
-            const now=Date.now()/1000;
-            for(const t of gs.towers) {
-                if(now-t.ls<CONFIG.TOWER_COOLDOWN) continue;
-                let cr=null, cd=t.range+1;
-                for(const r of gs.redUnits) {
-                    if(r.hp<=0) continue;
-                    const d=Math.abs(t.x-Math.round(r.x))+Math.abs(t.y-Math.round(r.y));
-                    if(d<=t.range&&d<cd){cd=d;cr=r;}
-                }
-                if(cr){t.ls=now;gs.bullets.push({x:t.x,y:t.y,tx:Math.round(cr.x),ty:Math.round(cr.y),dmg:t.dmg,st:now,tr:cr});}
-            }
-        }
-        
-        function updBullets() {
-            if(gs.gamePhase!='night') return;
-            const now=Date.now()/1000;
-            for(let i=gs.bullets.length-1;i>=0;i--) {
-                const b=gs.bullets[i];
-                const p=Math.min(1,(now-b.st)/0.3);
-                b.cx=b.x+(b.tx-b.x)*p; b.cy=b.y+(b.ty-b.y)*p;
-                if(p>=1) {
-                    if(b.tr.hp>0){b.tr.hp-=b.dmg;if(b.tr.hp<=0){const idx=gs.redUnits.indexOf(b.tr);if(idx!=-1)gs.redUnits.splice(idx,1);msg('💀 Убит!');}}
-                    gs.bullets.splice(i,1);
-                }
-            }
-        }
-        
-        function moveReds() {
-            if(gs.gamePhase!='night') return;
-            for(let i=gs.redUnits.length-1;i>=0;i--) {
-                const r=gs.redUnits[i]; if(r.hp<=0) continue;
-                if(!gs.blueUnits.length){gs.gamePhase='game_over';msg('💀 Поражение!',3);return;}
-                const b=gs.blueUnits[0], bp={x:Math.round(b.x),y:Math.round(b.y)};
-                const rp={x:Math.round(r.x),y:Math.round(r.y)};
-                if(rp.x==bp.x&&rp.y==bp.y) {
-                    if(b.hasShield&&!b.shieldReady){b.hasShield=false;b.shieldReady=false;msg('🛡️ Щит!');
-                        for(const d of[{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}]) {
-                            const nx=rp.x+d.dx,ny=rp.y+d.dy;
-                            if(nx>=0&&nx<CONFIG.SIZE_X&&ny>=0&&ny<CONFIG.SIZE_Y&&!gs.walls.has(wallKey(nx,ny))){moveRed(i,nx,ny);break;}
-                        }
-                    }else{gs.gamePhase='game_over';msg('💀 Конец!',3);return;}
-                }
-                const rk=wallKey(rp.x,rp.y);
-                if(gs.walls.has(rk)&&gs.walls.get(rk).hp<999){if(!gs.wallAttacks.has(rk)){gs.wallAttacks.set(rk,0);}continue;}
-                if(gs.wallAttacks.has(rk)) gs.wallAttacks.delete(rk);
-                const path=bfs(rp,bp);
-                if(path&&path.length>0&&Math.random()<CONFIG.RED_SPEED_MULTIPLIER) moveRed(i,path[0].x,path[0].y);
-            }
-        }
-        
-        function updWalls() {
-            if(gs.gamePhase!='night') return;
-            for(const [k,p] of gs.wallAttacks) {
-                if(!gs.walls.has(k)){gs.wallAttacks.delete(k);continue;}
-                const w=gs.walls.get(k); if(w.hp==999){gs.wallAttacks.delete(k);continue;}
-                const [wx,wy]=k.split(',').map(Number);
-                let on=false;
-                for(const r of gs.redUnits) if(r.hp>0&&Math.round(r.x)==wx&&Math.round(r.y)==wy){on=true;break;}
-                if(on) {
-                    const bt=w.type=='wood_wall'?CONFIG.WOOD_WALL_BREAK_TIME:CONFIG.STONE_WALL_BREAK_TIME;
-                    const np=p+1/60;
-                    if(np>=bt){gs.towers=gs.towers.filter(t=>t.x!=wx||t.y!=wy);gs.walls.delete(k);gs.wallAttacks.delete(k);msg('💥 Стена!');}
-                    else gs.wallAttacks.set(k,np);
-                }
-            }
-        }
-        
-        function actTraps() {
-            if(gs.gamePhase!='night') return;
-            for(let i=gs.traps.length-1;i>=0;i--) {
-                const t=gs.traps[i];
-                for(let j=gs.redUnits.length-1;j>=0;j--) {
-                    const r=gs.redUnits[j];
-                    if(Math.round(r.x)==t.x&&Math.round(r.y)==t.y) {
-                        if(t.type=='fire'){r.hp-=2;gs.crystals++;msg('🔥 +1💎');}
-                        else msg('⏳ Заморозка!');
-                        gs.traps.splice(i,1); break;
-                    }
-                }
-            }
-        }
-        
-        // ==================== INTERACTION ====================
-        function checkNearby() {
-            if(!gs.blueUnits.length){gs.nearbyObject=null;return;}
-            const bx=Math.round(gs.blueUnits[0].x), by=Math.round(gs.blueUnits[0].y);
-            for(const r of gs.resources) if(Math.abs(r.x-bx)+Math.abs(r.y-by)<=1){gs.nearbyObject={type:'resource',data:r};return;}
-            for(const [k,w] of gs.walls) {
-                if(w.type=='border') continue;
-                const [wx,wy]=k.split(',').map(Number);
-                if(Math.abs(wx-bx)+Math.abs(wy-by)<=1){gs.nearbyObject={type:'wall',x:wx,y:wy,wt:w.type};return;}
-            }
-            for(let i=0;i<gs.towers.length;i++){const t=gs.towers[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'tower',idx:i};return;}}
-            for(let i=0;i<gs.traps.length;i++){const t=gs.traps[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'trap',idx:i};return;}}
-            for(let i=0;i<gs.totems.length;i++){const t=gs.totems[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'totem',idx:i};return;}}
-            for(let i=0;i<gs.teleports.length;i++){const t=gs.teleports[i];if(Math.abs(t.x-bx)+Math.abs(t.y-by)<=1){gs.nearbyObject={type:'teleport',idx:i};return;}}
-            gs.nearbyObject=null;
-        }
-        
-        function collect() {
-            if(!gs.blueUnits.length||gs.gamePhase!='day'){msg('❌ Только днём!');return;}
-            checkNearby();
-            if(!gs.nearbyObject){msg('❌ Ничего рядом');return;}
-            const o=gs.nearbyObject;
-            if(o.type=='resource') {
-                const r=o.data;
-                if(r.type=='tree'){gs.woodCount++;msg('🌲 +1 дерево');}
-                else if(r.type=='rock'){gs.stoneCount++;msg('🪨 +1 камень');}
-                else if(r.type=='crystal'){gs.crystals++;msg('✨ +1 кристалл');}
-                else if(r.type=='shield'){gs.blueUnits[0].hasShield=true;gs.blueUnits[0].shieldReady=true;msg('🛡️ Щит!');}
-                else if(r.type=='speed') msg('⚡ Скорость!');
-                gs.resources=gs.resources.filter(x=>!(x.x==r.x&&x.y==r.y));
-            } else if(o.type=='wall') {
-                if(o.wt=='wood_wall') gs.woodCount++;
-                else gs.stoneCount++;
-                gs.wallAttacks.delete(wallKey(o.x,o.y));
-                gs.walls.delete(wallKey(o.x,o.y));
-                msg('🧱 Демонтировано');
-            } else if(o.type=='tower') {
-                const t=gs.towers[o.idx];
-                if(t.type=='wood') gs.woodCount+=2; else gs.stoneCount+=2;
-                gs.towers.splice(o.idx,1); msg('🗼 Демонтировано');
-            } else if(o.type=='trap'){gs.crystals++;gs.traps.splice(o.idx,1);msg('⚡ +1💎');}
-            else if(o.type=='totem'){gs.crystals+=2;gs.totems.splice(o.idx,1);msg('✨ +2💎');}
-            else if(o.type=='teleport'){gs.crystals+=3;gs.teleports.splice(o.idx,1);msg('🌀 +3💎');}
-            gs.nearbyObject=null;
-        }
-        
-        function shield() {
-            if(!gs.blueUnits.length||gs.gamePhase!='day'){msg('❌ Только днём!');return;}
-            const b=gs.blueUnits[0];
-            if(b.hasShield&&b.shieldReady){b.shieldReady=false;msg('🛡️ Щит активен!');setTimeout(()=>{b.hasShield=false;msg('Щит кончился');},CONFIG.SHIELD_DURATION*1000);}
-            else msg('❌ Нет щита');
-        }
-        
-        function build(x,y,type) {
-            if(!posFree(x,y)){msg('❌ Занято!');return false;}
-            const costs={wood_wall:{r:'wood',a:CONFIG.WOOD_WALL_COST},stone_wall:{r:'stone',a:CONFIG.STONE_WALL_COST},wood_tower:{r:'wood',a:CONFIG.WOOD_TOWER_COST},stone_tower:{r:'stone',a:CONFIG.STONE_TOWER_COST},totem_light:{r:'crystal',a:CONFIG.TOTEM_LIGHT_COST},time_trap:{r:'crystal',a:CONFIG.TIME_TRAP_COST},fire_trap:{r:'crystal',a:CONFIG.FIRE_TRAP_COST},teleport:{r:'crystal',a:CONFIG.TELEPORT_COST}};
-            const c=costs[type]; if(!c) return false;
-            let ok=false;
-            if(c.r=='wood') ok=gs.woodCount>=c.a;
-            else if(c.r=='stone') ok=gs.stoneCount>=c.a;
-            else ok=gs.crystals>=c.a;
-            if(!ok){msg('❌ Не хватает!');return false;}
-            if(c.r=='wood')gs.woodCount-=c.a;else if(c.r=='stone')gs.stoneCount-=c.a;else gs.crystals-=c.a;
-            if(type=='wood_wall'){gs.walls.set(wallKey(x,y),{hp:CONFIG.WOOD_WALL_BREAK_TIME,maxHp:CONFIG.WOOD_WALL_BREAK_TIME,type:'wood_wall'});msg('🪵 Стена!');}
-            else if(type=='stone_wall'){gs.walls.set(wallKey(x,y),{hp:CONFIG.STONE_WALL_BREAK_TIME,maxHp:CONFIG.STONE_WALL_BREAK_TIME,type:'stone_wall'});msg('🪨 Стена!');}
-            else if(type=='wood_tower'){gs.towers.push({x,y,type:'wood',dmg:0.5,range:4,ls:Date.now()/1000});msg('🗼 Башня!');}
-            else if(type=='stone_tower'){gs.towers.push({x,y,type:'stone',dmg:1,range:5,ls:Date.now()/1000});msg('🏰 Башня!');}
-            else if(type=='totem_light'){gs.totems.push({x,y,type:'light',radius:4});msg('🕯️ Тотем!');}
-            else if(type=='time_trap'){gs.traps.push({x,y,type:'time'});msg('⏳ Ловушка!');}
-            else if(type=='fire_trap'){gs.traps.push({x,y,type:'fire'});msg('🔥 Ловушка!');}
-            else if(type=='teleport'){gs.teleports.push({x,y});msg('🌀 Телепорт!');}
-            return true;
-        }
-        
-        // ==================== PHASES ====================
-        function chkNightEnd() {
-            if(gs.gamePhase=='night'&&!gs.redUnits.length){msg('🌞 Рассвет!',2);gs.timeLeft=0;}
-        }
-        
-        function chgPhase() {
-            if(gs.gamePhase=='day'){
-                gs.gamePhase='night'; gs.timeLeft=CONFIG.NIGHT_DURATION;
-                gs.bullets=[]; gs.redMoves.clear(); gs.blueIsMoving=false;
-                if(gs.blueUnits.length){gs.blueUnits[0].x=Math.round(gs.blueUnits[0].x);gs.blueUnits[0].y=Math.round(gs.blueUnits[0].y);}
-                spawnReds(); msg(`🌙 Ночь ${gs.currentNight}!`,3);
-            } else {
-                gs.gamePhase='day'; gs.currentNight++; gs.timeLeft=CONFIG.DAY_DURATION;
-                gs.score=gs.currentNight-1;
-                if(gs.score>gs.bestScore){gs.bestScore=gs.score;localStorage.setItem('cs_best',gs.bestScore);}
-                gs.redUnits=[]; gs.bullets=[]; gs.redMoves.clear();
-                if(gs.blueUnits.length){gs.blueUnits[0].x=Math.round(gs.blueUnits[0].x);gs.blueUnits[0].y=Math.round(gs.blueUnits[0].y);}
-                genWorld(); msg(`🌞 День ${gs.currentNight}!`,3);
-            }
+            
+            console.log('🌙 Ночь', currentNight, '- Красных:', reds.length);
         }
         
         function startGame() {
-            gs.gamePhase='day'; gs.currentNight=1; gs.timeLeft=CONFIG.DAY_DURATION;
-            gs.woodCount=CONFIG.START_WOOD; gs.stoneCount=CONFIG.START_STONE;
-            gs.crystals=CONFIG.START_CRYSTALS; gs.selectedBuilding=null;
-            gs.blueIsMoving=false; gs.redMoves.clear(); gs.score=0;
-            genInitial(); checkNearby(); msg('🎮 Погнали! [E]-сбор [F]-щит',3);
+            console.log('🎮 НАЧАЛО ИГРЫ');
+            currentNight = 1;
+            woodCount = 5;
+            stoneCount = 3;
+            crystals = 2;
+            blueX = 12;
+            blueY = 9;
+            score = 0;
+            startDay();
         }
         
-        // ==================== RENDER ====================
-        function spr(key,x,y,w,h) {
-            if(sprites[key]) { ctx.drawImage(sprites[key],x,y,w,h); return true; }
-            return false;
+        // ==================== ДВИЖЕНИЕ ====================
+        function moveBlue(dx, dy) {
+            const nx = blueX + dx;
+            const ny = blueY + dy;
+            
+            // Проверка границ
+            if (nx < 0 || nx >= CONFIG.SIZE_X || ny < 0 || ny >= CONFIG.SIZE_Y) return;
+            
+            // Проверка стен
+            if (walls.some(w => w.x === nx && w.y === ny)) return;
+            
+            blueX = nx;
+            blueY = ny;
+            
+            // Проверка столкновения с красными
+            if (gameState === 'night') {
+                for (const red of reds) {
+                    if (Math.abs(red.x - blueX) < 1 && Math.abs(red.y - blueY) < 1) {
+                        gameState = 'game_over';
+                        score = currentNight - 1;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            localStorage.setItem('cs_best', bestScore);
+                        }
+                        console.log('💀 ПОРАЖЕНИЕ! Ночей:', score);
+                    }
+                }
+            }
         }
         
+        // ==================== ОБНОВЛЕНИЕ ====================
+        function update(dt) {
+            if (gameState === 'day' || gameState === 'night') {
+                timeLeft -= dt;
+                
+                if (timeLeft <= 0) {
+                    if (gameState === 'day') {
+                        currentNight++;
+                        startNight();
+                    } else {
+                        startDay();
+                    }
+                }
+            }
+            
+            // Движение красных
+            if (gameState === 'night') {
+                for (const red of reds) {
+                    if (Math.random() < 0.05) {
+                        const dx = Math.sign(blueX - red.x) * (Math.random() < 0.7 ? 1 : 0);
+                        const dy = Math.sign(blueY - red.y) * (Math.random() < 0.7 ? 0 : 1);
+                        
+                        const nx = red.x + (Math.random() < 0.5 ? dx : 0);
+                        const ny = red.y + (Math.random() < 0.5 ? dy : 0);
+                        
+                        if (nx >= 0 && nx < CONFIG.SIZE_X && ny >= 0 && ny < CONFIG.SIZE_Y) {
+                            if (!walls.some(w => w.x === Math.round(nx) && w.y === Math.round(ny))) {
+                                red.x = nx;
+                                red.y = ny;
+                            }
+                        }
+                    }
+                    
+                    // Проверка столкновения
+                    if (Math.abs(red.x - blueX) < 0.8 && Math.abs(red.y - blueY) < 0.8) {
+                        gameState = 'game_over';
+                        score = currentNight - 1;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            localStorage.setItem('cs_best', bestScore);
+                        }
+                        console.log('💀 ПОРАЖЕНИЕ!');
+                    }
+                }
+            }
+        }
+        
+        // ==================== ОТРИСОВКА ====================
         function draw() {
-            ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,0,canvas.width,canvas.height);
-            const C=CONFIG.CELL;
+            const C = CONFIG.CELL;
             
-            // Grid
-            for(let y=0;y<CONFIG.SIZE_Y;y++) for(let x=0;x<CONFIG.SIZE_X;x++) {
-                ctx.fillStyle=(x+y)%2==0?'#2d5a2c':'#1e4a1e';
-                ctx.fillRect(x*C,y*C,C,C);
+            // Очистка
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (gameState === 'menu') {
+                drawMenu();
+                return;
             }
             
-            // Resources
-            for(const r of gs.resources) {
-                const rx=r.x*C, ry=r.y*C;
-                if(r.type=='tree'){if(!spr('tree',rx,ry,C,C)){ctx.fillStyle='#228B22';ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.35,0,Math.PI*2);ctx.fill();}}
-                else if(r.type=='rock'){if(!spr('rock',rx,ry,C,C)){ctx.fillStyle='#808080';ctx.fillRect(rx+C*.2,ry+C*.2,C*.6,C*.6);}}
-                else if(r.type=='crystal'){if(!spr('crystal',rx,ry,C,C)){ctx.fillStyle='#FF69B4';ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
-                else if(r.type=='shield'){if(!spr('shield',rx,ry,C,C)){ctx.fillStyle='#FFD700';ctx.beginPath();ctx.arc(rx+C/2,ry+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
-            }
-            
-            // Walls
-            for(const [k,w] of gs.walls) {
-                const [x,y]=k.split(',').map(Number);
-                if(w.hp==999){ctx.fillStyle='#4a3728';ctx.fillRect(x*C,y*C,C,C);}
-                else {
-                    const sk=w.type=='wood_wall'?'wall_wood':'wall_stone';
-                    if(!spr(sk,x*C,y*C,C,C)){ctx.fillStyle=w.type=='wood_wall'?'#8B4513':'#808080';ctx.fillRect(x*C+2,y*C+2,C-4,C-4);}
-                    const p=gs.wallAttacks.get(k)||0;
-                    const bw=Math.max(0,(w.maxHp-p)/w.maxHp)*(C-10);
-                    ctx.fillStyle='#333';ctx.fillRect(x*C+5,y*C+C-8,C-10,5);
-                    ctx.fillStyle='#0F0';ctx.fillRect(x*C+5,y*C+C-8,bw,5);
+            // Сетка
+            for (let y = 0; y < CONFIG.SIZE_Y; y++) {
+                for (let x = 0; x < CONFIG.SIZE_X; x++) {
+                    ctx.fillStyle = (x + y) % 2 === 0 ? '#2d5a2c' : '#1e4a1e';
+                    ctx.fillRect(x * C, y * C, C, C);
                 }
             }
             
-            // Towers
-            for(const t of gs.towers) {
-                const sk=t.type=='wood'?'tower_wood':'tower_stone';
-                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.type=='wood'?'#CD853F':'#A0A0A0';ctx.fillRect(t.x*C+C*.2,t.y*C+C*.2,C*.6,C*.6);}
-                ctx.strokeStyle='rgba(255,215,0,.2)';ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,t.range*C,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+            // Стены
+            for (const wall of walls) {
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(wall.x * C + 2, wall.y * C + 2, C - 4, C - 4);
+                ctx.strokeStyle = '#654321';
+                ctx.strokeRect(wall.x * C + 2, wall.y * C + 2, C - 4, C - 4);
             }
             
-            // Totems, Traps, Teleports
-            for(const t of gs.totems) {if(!spr('totem_light',t.x*C,t.y*C,C,C)){ctx.fillStyle='#08F';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.3,0,Math.PI*2);ctx.fill();}}
-            for(const t of gs.traps) {
-                const sk=t.type=='time'?'trap_time':'trap_fire';
-                if(!spr(sk,t.x*C,t.y*C,C,C)){ctx.fillStyle=t.type=='time'?'#FA0':'#F44';ctx.fillRect(t.x*C+C*.25,t.y*C+C*.25,C*.5,C*.5);}
-            }
-            for(const t of gs.teleports) {if(!spr('teleport',t.x*C,t.y*C,C,C)){ctx.fillStyle='#93C';ctx.beginPath();ctx.arc(t.x*C+C/2,t.y*C+C/2,C*.35,0,Math.PI*2);ctx.fill();}}
-            
-            // Bullets
-            for(const b of gs.bullets) {
-                ctx.fillStyle='#FF0'; ctx.shadowBlur=8; ctx.shadowColor='#FFD700';
-                ctx.beginPath(); ctx.arc((b.cx||b.x)*C+C/2,(b.cy||b.y)*C+C/2,4,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+            // Ресурсы (случайные)
+            ctx.fillStyle = '#228B22';
+            for (let i = 0; i < 10; i++) {
+                const x = ((i * 137 + 50) % CONFIG.SIZE_X) * C + C/2;
+                const y = ((i * 97 + 30) % CONFIG.SIZE_Y) * C + C/2;
+                ctx.beginPath();
+                ctx.arc(x, y, C * 0.3, 0, Math.PI * 2);
+                ctx.fill();
             }
             
-            // Blue unit
-            if(gs.blueUnits.length) {
-                const b=gs.blueUnits[0]; const bx=b.x*C, by=b.y*C;
-                let sk='blue_idle'; if(gs.gamePhase=='night') sk='blue_scared';
-                if(!spr(sk,bx,by,C,C)) {
-                    ctx.fillStyle=gs.gamePhase=='night'?'#69F':'#48F';
-                    ctx.beginPath(); ctx.arc(bx+C/2,by+C/2,C*.35,0,Math.PI*2); ctx.fill();
-                }
-                if(b.hasShield&&!b.shieldReady){ctx.strokeStyle='#FFD700';ctx.lineWidth=3;ctx.beginPath();ctx.arc(bx+C/2,by+C/2,C*.45,0,Math.PI*2);ctx.stroke();}
+            // Синий игрок
+            const bx = blueX * C + C/2;
+            const by = blueY * C + C/2;
+            
+            ctx.fillStyle = '#4488FF';
+            ctx.beginPath();
+            ctx.arc(bx, by, C * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Глаза
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(bx - C * 0.12, by - C * 0.08, C * 0.1, 0, Math.PI * 2);
+            ctx.arc(bx + C * 0.12, by - C * 0.08, C * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(bx - C * 0.12, by - C * 0.08, C * 0.05, 0, Math.PI * 2);
+            ctx.arc(bx + C * 0.12, by - C * 0.08, C * 0.05, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Красные враги
+            for (const red of reds) {
+                const rx = red.x * C + C/2;
+                const ry = red.y * C + C/2;
+                
+                ctx.fillStyle = '#FF3333';
+                ctx.beginPath();
+                ctx.arc(rx, ry, C * 0.35, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // HP
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${Math.max(10, C * 0.3)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText(`♥${red.hp}`, rx, ry - C * 0.2);
+                ctx.textAlign = 'left';
             }
             
-            // Red units
-            for(const r of gs.redUnits) {
-                if(r.hp<=0) continue;
-                const rx=r.x*C, ry=r.y*C;
-                const sk=gs.gamePhase=='day'?'red_sleep':'red';
-                if(!spr(sk,rx,ry,C,C)) {
-                    ctx.fillStyle=gs.gamePhase=='day'?'#633':'#F33';
-                    ctx.beginPath(); ctx.arc(rx+C/2,ry+C/2,C*.35,0,Math.PI*2); ctx.fill();
-                }
-                ctx.fillStyle='#FAA'; ctx.font=`bold ${Math.max(10,C*.35)}px Arial`; ctx.textAlign='center';
-                ctx.fillText(`♥${r.hp}`,rx+C/2,ry-C*.3); ctx.textAlign='left';
-            }
+            // UI панель
+            drawUI();
             
-            // Shop
-            if(gs.gamePhase=='day'&&gs.gamePhase!='game_over') {
-                const sx=canvas.width-170;
-                ctx.fillStyle='rgba(13,13,26,.95)';ctx.fillRect(sx-5,10,165,canvas.height-80);
-                ctx.strokeStyle='#FFD700';ctx.strokeRect(sx-5,10,165,canvas.height-80);
-                ctx.fillStyle='#FFD700';ctx.font='bold 11px Arial';ctx.textAlign='center';
-                ctx.fillText('🏪 МАГАЗИН',sx+80,25); ctx.textAlign='left';
-                const items=[['Дер.стена','wood_wall',CONFIG.WOOD_WALL_COST,'wood'],['Кам.стена','stone_wall',CONFIG.STONE_WALL_COST,'stone'],['Дер.башня','wood_tower',CONFIG.WOOD_TOWER_COST,'wood'],['Кам.башня','stone_tower',CONFIG.STONE_TOWER_COST,'stone'],['Тотем','totem_light',CONFIG.TOTEM_LIGHT_COST,'crystal'],['Лов.врем','time_trap',CONFIG.TIME_TRAP_COST,'crystal'],['Огн.лов','fire_trap',CONFIG.FIRE_TRAP_COST,'crystal'],['Телепорт','teleport',CONFIG.TELEPORT_COST,'crystal']];
-                items.forEach(([n,t,c,r],i)=>{
-                    const y=42+i*28;
-                    if(gs.selectedBuilding==t){ctx.fillStyle='rgba(255,215,0,.25)';ctx.fillRect(sx,y-10,155,24);}
-                    ctx.fillStyle='white';ctx.font='9px Arial';ctx.fillText(n,sx+5,y+2);
-                    ctx.fillText((r=='crystal'?'💎':r=='wood'?'🪵':'🪨')+c,sx+110,y+2);
-                });
+            // Game Over
+            if (gameState === 'game_over') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#FF0000';
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('💀 ПОРАЖЕНИЕ 💀', canvas.width / 2, canvas.height / 2 - 20);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '18px Arial';
+                ctx.fillText(`Ночей: ${score}`, canvas.width / 2, canvas.height / 2 + 25);
+                ctx.fillText('R / Клик - Рестарт', canvas.width / 2, canvas.height / 2 + 55);
+                ctx.textAlign = 'left';
             }
+        }
+        
+        function drawUI() {
+            const uy = CONFIG.CELL * CONFIG.SIZE_Y;
+            const C = CONFIG.CELL;
             
-            // Game over
-            if(gs.gamePhase=='game_over') {
-                ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(0,0,canvas.width,canvas.height);
-                ctx.fillStyle='red';ctx.font='bold 32px Arial';ctx.textAlign='center';
-                ctx.fillText('💀 ПОРАЖЕНИЕ 💀',canvas.width/2,canvas.height/2-20);
-                ctx.fillStyle='white';ctx.font='16px Arial';
-                ctx.fillText(`Ночей: ${gs.score}`,canvas.width/2,canvas.height/2+20);
-                ctx.fillText('R/тап - рестарт',canvas.width/2,canvas.height/2+50);
-                ctx.textAlign='left';
-            }
+            // Фон UI
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, uy, canvas.width, 70);
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, uy, canvas.width, 70);
             
-            // UI bar
-            const uy=C*CONFIG.SIZE_Y;
-            ctx.fillStyle='#1a1a2e';ctx.fillRect(0,uy,canvas.width,70);
-            ctx.strokeStyle='#FFD700';ctx.strokeRect(0,uy,canvas.width,70);
-            spr(gs.gamePhase=='day'?'day':'night',10,uy+5,40,40);
-            ctx.fillStyle=gs.gamePhase=='day'?'#FFD700':'#8B6CFF';ctx.font='bold 14px Arial';
-            ctx.fillText(`${gs.gamePhase=='day'?'☀️':'🌙'} ${gs.currentNight}`,55,uy+25);
-            ctx.fillStyle='#F44';ctx.fillText(`👹${gs.redUnits.length}`,160,uy+25);
-            ctx.fillStyle='#8B6914';ctx.fillText(`🪵${gs.woodCount}`,230,uy+25);
-            ctx.fillStyle='#A0A0A0';ctx.fillText(`🪨${gs.stoneCount}`,300,uy+25);
-            spr('ui_crystal',370,uy+8,24,24); ctx.fillStyle='#FFD700';ctx.fillText(`${gs.crystals}`,398,uy+25);
-            const m=Math.floor(gs.timeLeft/60),s=Math.floor(gs.timeLeft%60);
-            ctx.fillText(`⏱${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,canvas.width-120,uy+25);
-            const mt=gs.gamePhase=='day'?CONFIG.DAY_DURATION:CONFIG.NIGHT_DURATION;
-            const bw=(gs.timeLeft/mt)*(canvas.width-200);
-            ctx.fillStyle='#333';ctx.fillRect(60,uy+35,canvas.width-120,8);
-            ctx.fillStyle=gs.gamePhase=='day'?'#FFD700':'#8B3A3A';ctx.fillRect(60,uy+35,bw,8);
-            ctx.fillStyle='#FFD700';ctx.font='11px Arial';ctx.fillText(`🏆${gs.bestScore}`,canvas.width-140,uy+18);
+            // Информация
+            ctx.fillStyle = gameState === 'day' ? '#FFD700' : '#8B6CFF';
+            ctx.font = 'bold 14px Arial';
+            const phaseText = gameState === 'day' ? '☀️ ДЕНЬ' : '🌙 НОЧЬ';
+            ctx.fillText(`${phaseText} ${currentNight}`, 10, uy + 25);
+            
+            ctx.fillStyle = '#FF4444';
+            ctx.fillText(`👹 ${reds.length}`, 150, uy + 25);
+            
+            ctx.fillStyle = '#8B6914';
+            ctx.fillText(`🪵 ${woodCount}`, 230, uy + 25);
+            
+            ctx.fillStyle = '#A0A0A0';
+            ctx.fillText(`🪨 ${stoneCount}`, 300, uy + 25);
+            
+            ctx.fillStyle = '#FFD700';
+            ctx.fillText(`💎 ${crystals}`, 370, uy + 25);
+            
+            // Таймер
+            const mins = Math.floor(timeLeft / 60);
+            const secs = Math.floor(timeLeft % 60);
+            ctx.fillStyle = '#FFE66D';
+            ctx.fillText(`⏱ ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`, canvas.width - 120, uy + 25);
+            
+            // Прогресс-бар
+            const maxTime = gameState === 'day' ? CONFIG.DAY_DURATION : CONFIG.NIGHT_DURATION;
+            const barW = (timeLeft / maxTime) * (canvas.width - 200);
+            ctx.fillStyle = '#333';
+            ctx.fillRect(60, uy + 35, canvas.width - 200, 8);
+            ctx.fillStyle = gameState === 'day' ? '#FFD700' : '#8B3A3A';
+            ctx.fillRect(60, uy + 35, barW, 8);
+            
+            // Рекорд
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '11px Arial';
+            ctx.fillText(`🏆 ${bestScore}`, canvas.width - 140, uy + 55);
         }
         
         function drawMenu() {
-            ctx.fillStyle='#0a0a1a';ctx.fillRect(0,0,canvas.width,canvas.height);
-            const cx=canvas.width/2;
-            ctx.fillStyle='#FFD700';ctx.font=`bold ${Math.min(36,canvas.width/16)}px Arial`;
-            ctx.textAlign='center';ctx.fillText('🏰 CRYSTAL SURVIVORS 🏰',cx,100);
-            ctx.fillStyle='white';ctx.font=`${Math.min(16,canvas.width/35)}px Arial`;
-            ctx.fillText('Строй защиту, переживи ночи!',cx,150);
-            ctx.fillStyle='#2a2a3a';ctx.fillRect(cx-120,200,240,50);
-            ctx.strokeStyle='#FFD700';ctx.strokeRect(cx-120,200,240,50);
-            ctx.fillStyle='white';ctx.font='bold 20px Arial';ctx.fillText('▶ НАЧАТЬ ИГРУ',cx,232);
-            ctx.fillStyle='#AAA';ctx.font='13px Arial';
-            ctx.fillText('WASD/Стрелки [E]сбор [F]щит',cx,290);
-            ctx.fillText('Тап/Клик для взаимодействия',cx,315);
-            if(gs.bestScore>0){ctx.fillStyle='#FFD700';ctx.fillText(`🏆 Рекорд: ${gs.bestScore} ночей`,cx,355);}
-            ctx.textAlign='left';
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            // Фон
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Заголовок
+            ctx.fillStyle = '#FFD700';
+            ctx.font = `bold ${Math.min(36, canvas.width / 15)}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('🏰 CRYSTAL SURVIVORS 🏰', cx, cy - 100);
+            
+            // Подсказка
+            ctx.fillStyle = 'white';
+            ctx.font = `${Math.min(16, canvas.width / 35)}px Arial`;
+            ctx.fillText('Строй защиту, переживи ночи!', cx, cy - 50);
+            
+            // Кнопка
+            const btnW = 250, btnH = 55;
+            const btnX = cx - btnW/2, btnY = cy - 20;
+            
+            ctx.fillStyle = '#2a2a3a';
+            ctx.fillRect(btnX, btnY, btnW, btnH);
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(btnX, btnY, btnW, btnH);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 22px Arial';
+            ctx.fillText('▶ НАЧАТЬ ИГРУ', cx, btnY + 38);
+            
+            // Управление
+            ctx.fillStyle = '#AAAAAA';
+            ctx.font = '14px Arial';
+            ctx.fillText('WASD/Стрелки - движение', cx, cy + 70);
+            ctx.fillText('E - сбор ресурсов', cx, cy + 95);
+            ctx.fillText('R - рестарт', cx, cy + 120);
+            
+            if (bestScore > 0) {
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(`🏆 Лучший результат: ${bestScore} ночей`, cx, cy + 155);
+            }
+            
+            ctx.textAlign = 'left';
         }
         
-        // ==================== INPUT ====================
-        document.addEventListener('keydown',e=>{
-            const k=e.key.toLowerCase();
-            if(gs.gamePhase=='game_over'){if(k=='r')startGame();return;}
-            if(gs.gamePhase=='menu'){if(k=='enter'||k==' '){startGame();return;}return;}
-            if(gs.gamePhase!='day'&&gs.gamePhase!='night') return;
-            if(k=='e'){e.preventDefault();collect();return;}
-            if(k=='f'){e.preventDefault();shield();return;}
-            let dx=0,dy=0;
-            if(k=='w'||k=='arrowup') dy=-1;
-            else if(k=='s'||k=='arrowdown') dy=1;
-            else if(k=='a'||k=='arrowleft') dx=-1;
-            else if(k=='d'||k=='arrowright') dx=1;
+        // ==================== УПРАВЛЕНИЕ ====================
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            
+            if (gameState === 'game_over') {
+                if (key === 'r') startGame();
+                return;
+            }
+            
+            if (gameState === 'menu') {
+                if (key === 'enter' || key === ' ') startGame();
+                return;
+            }
+            
+            if (gameState !== 'day' && gameState !== 'night') return;
+            
+            if (key === 'e') {
+                // Сбор ресурсов (заглушка)
+                console.log('Сбор ресурсов');
+                return;
+            }
+            
+            if (key === 'r') {
+                startGame();
+                return;
+            }
+            
+            let dx = 0, dy = 0;
+            if (key === 'w' || key === 'arrowup') dy = -1;
+            else if (key === 's' || key === 'arrowdown') dy = 1;
+            else if (key === 'a' || key === 'arrowleft') dx = -1;
+            else if (key === 'd' || key === 'arrowright') dx = 1;
             else return;
-            e.preventDefault(); moveBlue(dx,dy);
+            
+            e.preventDefault();
+            moveBlue(dx, dy);
         });
         
-        canvas.addEventListener('click',e=>{
-            if(gs.gamePhase=='game_over'||gs.gamePhase=='menu'){startGame();return;}
-            if(gs.gamePhase!='day') return;
-            const r=canvas.getBoundingClientRect();
-            const x=e.clientX-r.left, y=e.clientY-r.top;
-            const sx=canvas.width-170;
-            if(x>=sx&&y<canvas.height-70) {
-                const items=['wood_wall','stone_wall','wood_tower','stone_tower','totem_light','time_trap','fire_trap','teleport'];
-                const idx=Math.floor((y-42)/28);
-                if(idx>=0&&idx<items.length){gs.selectedBuilding=items[idx];return;}
-            }
-            const cx=Math.floor(x/CONFIG.CELL), cy=Math.floor(y/CONFIG.CELL);
-            if(cx>=0&&cx<CONFIG.SIZE_X&&cy>=0&&cy<CONFIG.SIZE_Y&&gs.selectedBuilding) {
-                if(build(cx,cy,gs.selectedBuilding)) gs.selectedBuilding=null;
+        canvas.addEventListener('click', (e) => {
+            if (gameState === 'menu' || gameState === 'game_over') {
+                startGame();
+                return;
             }
         });
         
-        // ==================== LOOP ====================
-        function update() {
-            if(gs.gamePhase=='day'||gs.gamePhase=='night') {
-                gs.timeLeft-=1/60; if(gs.timeLeft<=0) chgPhase();
-                updBlue(); updReds(); updWalls(); towersAtk(); updBullets();
-                actTraps(); moveReds(); chkNightEnd(); checkNearby();
-            }
+        // ==================== ИГРОВОЙ ЦИКЛ ====================
+        let lastTime = performance.now();
+        
+        function gameLoop(currentTime) {
+            const dt = Math.min((currentTime - lastTime) / 1000, 0.1); // Ограничение dt
+            lastTime = currentTime;
+            
+            update(dt);
+            draw();
+            
+            requestAnimationFrame(gameLoop);
         }
         
-        function loop() { update(); render(); requestAnimationFrame(loop); }
+        // ==================== ЗАПУСК ====================
+        console.log('✅ Инициализация завершена');
         
-        // ==================== START ====================
-        async function init() {
-            await initSDK();
-            await loadAllSprites();
-            document.getElementById('loading').style.display='none';
-            loop();
-        }
+        // Загружаем рекорд
+        bestScore = parseInt(localStorage.getItem('cs_best') || '0');
         
-        resizeCanvas();
-        init();
+        // Показываем меню
+        gameState = 'menu';
+        
+        // Запускаем цикл
+        requestAnimationFrame(gameLoop);
+        
+        console.log('🎮 Игра готова! Нажмите Enter или кликните для старта');
     </script>
 </body>
 </html>
